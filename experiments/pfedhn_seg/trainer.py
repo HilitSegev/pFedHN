@@ -109,8 +109,8 @@ def train(data_names: List[str], data_path: str,
         'adam': torch.optim.Adam(params=hnet.parameters(), lr=lr)
     }
     optimizer = optimizers[optim]
-    # TODO: Change criteria to fit segmentation
-    criteria = torch.nn.CrossEntropyLoss()
+    # TODO: is this the loss to use?
+    criteria = torch.nn.BCEWithLogitsLoss()
 
     ################
     # init metrics #
