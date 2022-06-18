@@ -76,7 +76,6 @@ def train(data_name: str, data_path: str, classes_per_node: int, num_nodes: int,
         logging.info("auto embedding size")
         embed_dim = int(1 + num_nodes / 4)
 
-    # TODO: Define models for the segmentation problem
     if data_name == "cifar10":
         hnet = CNNHyper(num_nodes, embed_dim, hidden_dim=hyper_hid, n_hidden=n_hidden, n_kernels=n_kernels)
         net = CNNTarget(n_kernels=n_kernels)
@@ -104,7 +103,6 @@ def train(data_name: str, data_path: str, classes_per_node: int, num_nodes: int,
         'adam': torch.optim.Adam(params=hnet.parameters(), lr=lr)
     }
     optimizer = optimizers[optim]
-    # TODO: Change criteria to fit segmentation
     criteria = torch.nn.CrossEntropyLoss()
 
     ################

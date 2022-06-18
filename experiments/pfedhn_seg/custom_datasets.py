@@ -30,22 +30,26 @@ class Promise12(Dataset):
 
         self.curr_dir = self.train_dir if self.train else self.test_dir
 
-    def __len__(self):
         # TODO: maybe it's better to use subdirectories for each case
-
         file_names = os.listdir(self.curr_dir)
-        nums_in_filenames = list(set([''.join(filter(lambda i: i.isdigit(), s)) for s in file_names]))
-        return len(nums_in_filenames)
+        nums_in_filenames = sorted(list(set([''.join(filter(lambda i: i.isdigit(), s)) for s in file_names])))
+        self.idx_to_case_map = dict(enumerate(nums_in_filenames))
+
+    def __len__(self):
+        return len(self.idx_to_case_map)
 
     def __getitem__(self, idx):
-        if not os.path.exists(f"{self.curr_dir}/Case{idx}.mhd"):
-            raise Exception(f"Case {idx} not in {'Train' if self.train else 'Test'} directory")
+        case_idx = self.idx_to_case_map[idx]
 
-        scans = sitk.GetArrayFromImage(sitk.ReadImage(f"{self.curr_dir}/Case{idx}.mhd", sitk.sitkFloat32))
+        if not os.path.exists(f"{self.curr_dir}/Case{case_idx}.mhd"):
+            raise Exception(f"Case {case_idx} not in {'Train' if self.train else 'Test'} directory")
+
+        scans = sitk.GetArrayFromImage(sitk.ReadImage(f"{self.curr_dir}/Case{case_idx}.mhd", sitk.sitkFloat32))
 
         if self.train:
-            label_segmentations = sitk.GetArrayFromImage(sitk.ReadImage(f"{self.curr_dir}/Case{idx}_segmentation.mhd",
-                                                                        sitk.sitkFloat32))
+            label_segmentations = sitk.GetArrayFromImage(
+                sitk.ReadImage(f"{self.curr_dir}/Case{case_idx}_segmentation.mhd",
+                               sitk.sitkFloat32))
         else:
             label_segmentations = None
 
@@ -71,8 +75,8 @@ def test_plot_dataset(data_obj):
         transform=trans
     )
 
-    train_scans, train_seg = dataset[21]
-    test_scans, test_seg = test_set[21]
+    train_scans, train_seg = dataset[1]
+    test_scans, test_seg = test_set[1]
 
     print(train_scans.shape)
     print(train_seg.shape)
