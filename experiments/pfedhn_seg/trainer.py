@@ -4,19 +4,22 @@ import logging
 import random
 from collections import OrderedDict, defaultdict
 from pathlib import Path
+from typing import List
 
 import numpy as np
 import torch
 import torch.utils.data
 from tqdm import trange
 
-from experiments.pfedhn.models import CNNHyper, CNNTarget
-from experiments.pfedhn.node import BaseNodes
+from experiments.pfedhn_seg.models import CNNHyper, CNNTarget
+from experiments.pfedhn_seg.node import BaseNodes
 from experiments.utils import get_device, set_logger, set_seed, str2bool
 
+ALLOWED_DATASETS = ['promise12', 'PROSTATEx']
 
-def eval_model(nodes, num_nodes, hnet, net, criteria, device, split):
-    curr_results = evaluate(nodes, num_nodes, hnet, net, criteria, device, split=split)
+
+def eval_model(nodes, hnet, net, criteria, device, split):
+    curr_results = evaluate(nodes, hnet, net, criteria, device, split=split)
     total_correct = sum([val['correct'] for val in curr_results.values()])
     total_samples = sum([val['total'] for val in curr_results.values()])
     avg_loss = np.mean([val['loss'] for val in curr_results.values()])
@@ -28,11 +31,11 @@ def eval_model(nodes, num_nodes, hnet, net, criteria, device, split):
 
 
 @torch.no_grad()
-def evaluate(nodes: BaseNodes, num_nodes, hnet, net, criteria, device, split='test'):
+def evaluate(nodes: BaseNodes, hnet, net, criteria, device, split='test'):
     hnet.eval()
     results = defaultdict(lambda: defaultdict(list))
 
-    for node_id in range(num_nodes):  # iterating over nodes
+    for node_id in range(len(nodes)):  # iterating over nodes
 
         running_loss, running_correct, running_samples = 0., 0., 0.
         if split == 'test':
@@ -59,33 +62,35 @@ def evaluate(nodes: BaseNodes, num_nodes, hnet, net, criteria, device, split='te
     return results
 
 
-def train(data_name: str, data_path: str, classes_per_node: int, num_nodes: int,
+def train(data_names: List[str], data_path: str,
           steps: int, inner_steps: int, optim: str, lr: float, inner_lr: float,
           embed_lr: float, wd: float, inner_wd: float, embed_dim: int, hyper_hid: int,
           n_hidden: int, n_kernels: int, bs: int, device, eval_every: int, save_path: Path,
           seed: int) -> None:
-
     ###############################
     # init nodes, hnet, local net #
     ###############################
-    nodes = BaseNodes(data_name, data_path, num_nodes, classes_per_node=classes_per_node,
-                      batch_size=bs)
+    nodes = BaseNodes(data_names, data_path, batch_size=bs)
 
     embed_dim = embed_dim
     if embed_dim == -1:
         logging.info("auto embedding size")
-        embed_dim = int(1 + num_nodes / 4)
+        embed_dim = int(1 + len(nodes) / 4)
 
     # TODO: Define models for the segmentation problem
-    if data_name == "cifar10":
-        hnet = CNNHyper(num_nodes, embed_dim, hidden_dim=hyper_hid, n_hidden=n_hidden, n_kernels=n_kernels)
-        net = CNNTarget(n_kernels=n_kernels)
-    elif data_name == "cifar100":
-        hnet = CNNHyper(num_nodes, embed_dim, hidden_dim=hyper_hid,
+    # if data_name == "cifar10":
+    #     hnet = CNNHyper(num_nodes, embed_dim, hidden_dim=hyper_hid, n_hidden=n_hidden, n_kernels=n_kernels)
+    #     net = CNNTarget(n_kernels=n_kernels)
+    # elif data_name == "cifar100":
+    #     hnet = CNNHyper(num_nodes, embed_dim, hidden_dim=hyper_hid,
+    #                     n_hidden=n_hidden, n_kernels=n_kernels, out_dim=100)
+    #     net = CNNTarget(n_kernels=n_kernels, out_dim=100)
+    if all([d in ALLOWED_DATASETS for d in data_names]):
+        hnet = CNNHyper(len(nodes), embed_dim, hidden_dim=hyper_hid,
                         n_hidden=n_hidden, n_kernels=n_kernels, out_dim=100)
         net = CNNTarget(n_kernels=n_kernels, out_dim=100)
     else:
-        raise ValueError("choose data_name from ['cifar10', 'cifar100']")
+        raise ValueError(f"choose data_name from {ALLOWED_DATASETS}")
 
     hnet = hnet.to(device)
     net = net.to(device)
@@ -122,7 +127,7 @@ def train(data_name: str, data_path: str, classes_per_node: int, num_nodes: int,
         hnet.train()
 
         # select client at random
-        node_id = random.choice(range(num_nodes))
+        node_id = random.choice(range(len(nodes)))
 
         # produce & load local network weights
         weights = hnet(torch.tensor([node_id], dtype=torch.long).to(device))
@@ -183,18 +188,19 @@ def train(data_name: str, data_path: str, classes_per_node: int, num_nodes: int,
         optimizer.step()
 
         step_iter.set_description(
-            f"Step: {step+1}, Node ID: {node_id}, Loss: {prvs_loss:.4f},  Acc: {prvs_acc:.4f}"
+            f"Step: {step + 1}, Node ID: {node_id}, Loss: {prvs_loss:.4f},  Acc: {prvs_acc:.4f}"
         )
 
         if step % eval_every == 0:
             last_eval = step
-            step_results, avg_loss, avg_acc, all_acc = eval_model(nodes, num_nodes, hnet, net, criteria, device, split="test")
-            logging.info(f"\nStep: {step+1}, AVG Loss: {avg_loss:.4f},  AVG Acc: {avg_acc:.4f}")
+            step_results, avg_loss, avg_acc, all_acc = eval_model(nodes, hnet, net, criteria, device,
+                                                                  split="test")
+            logging.info(f"\nStep: {step + 1}, AVG Loss: {avg_loss:.4f},  AVG Acc: {avg_acc:.4f}")
 
             results['test_avg_loss'].append(avg_loss)
             results['test_avg_acc'].append(avg_acc)
 
-            _, val_avg_loss, val_avg_acc, _ = eval_model(nodes, num_nodes, hnet, net, criteria, device, split="val")
+            _, val_avg_loss, val_avg_acc, _ = eval_model(nodes, hnet, net, criteria, device, split="val")
             if best_acc < val_avg_acc:
                 best_acc = val_avg_acc
                 best_step = step
@@ -213,8 +219,9 @@ def train(data_name: str, data_path: str, classes_per_node: int, num_nodes: int,
             results['test_best_std_based_on_step'].append(test_best_std_based_on_step)
 
     if step != last_eval:
-        _, val_avg_loss, val_avg_acc, _ = eval_model(nodes, num_nodes, hnet, net, criteria, device, split="val")
-        step_results, avg_loss, avg_acc, all_acc = eval_model(nodes, num_nodes, hnet, net, criteria, device, split="test")
+        _, val_avg_loss, val_avg_acc, _ = eval_model(nodes, hnet, net, criteria, device, split="val")
+        step_results, avg_loss, avg_acc, all_acc = eval_model(nodes, hnet, net, criteria, device,
+                                                              split="test")
         logging.info(f"\nStep: {step + 1}, AVG Loss: {avg_loss:.4f},  AVG Acc: {avg_acc:.4f}")
 
         results['test_avg_loss'].append(avg_loss)
@@ -253,10 +260,10 @@ if __name__ == '__main__':
     #############################
 
     parser.add_argument(
-        "--data-name", type=str, default="cifar10", choices=['cifar10', 'cifar100'], help="dir path for MNIST dataset"
+        "--data-names", type=List[str], default=['promise12', 'PROSTATEx'],
+        help="list of datasets to use for different clients"
     )
     parser.add_argument("--data-path", type=str, default="data", help="dir path for MNIST dataset")
-    parser.add_argument("--num-nodes", type=int, default=50, help="number of simulated nodes")
 
     ##################################
     #       Optimization args        #
@@ -297,16 +304,9 @@ if __name__ == '__main__':
 
     device = get_device(gpus=args.gpu)
 
-    if args.data_name == 'cifar10':
-        args.classes_per_node = 2
-    else:
-        args.classes_per_node = 10
-
     train(
-        data_name=args.data_name,
+        data_names=args.data_names,
         data_path=args.data_path,
-        classes_per_node=args.classes_per_node,
-        num_nodes=args.num_nodes,
         steps=args.num_steps,
         inner_steps=args.inner_steps,
         optim=args.optim,
