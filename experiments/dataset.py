@@ -17,6 +17,7 @@ def get_datasets(data_name, dataroot, normalize=True, val_size=10000):
     :return: train_set, val_set, test_set (tuple of pytorch dataset/subset)
     """
 
+    # TODO: Handle the new datasets
     if data_name =='cifar10':
         normalization = transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
         data_obj = CIFAR10
@@ -175,5 +176,25 @@ def gen_random_loaders(data_name, data_path, num_users, bz, classes_per_user):
         subsets = list(map(lambda x: torch.utils.data.Subset(d, x), usr_subset_idx))
         # create dataloaders from subsets
         dataloaders.append(list(map(lambda x: torch.utils.data.DataLoader(x, **loader_params), subsets)))
+
+    return dataloaders
+
+
+def gen_loaders(data_names, data_path, batch_size, classes_per_user):
+    """
+    generates train/val/test loaders of each client
+    :param data_names: name of datasets to use for different clients
+    :param data_path: root path for data dir
+    :param batch_size: batch size
+    :param classes_per_user: number of classes assigned to each client
+    :return: train/val/test loaders of each client, list of pytorch dataloaders
+    """
+    loader_params = {"batch_size": batch_size, "shuffle": False, "pin_memory": True, "num_workers": 0}
+    dataloaders = []
+    datasets_tuples = list(map(lambda data_name: get_datasets(data_name, data_path, normalize=True), data_names))
+    for i in range(len(datasets_tuples[0])):
+        datasets = list(map(lambda dataset_tuple: dataset_tuple[i], datasets_tuples))
+        # create dataloaders from subsets
+        dataloaders.append(list(map(lambda x: torch.utils.data.DataLoader(x, **loader_params), datasets)))
 
     return dataloaders
