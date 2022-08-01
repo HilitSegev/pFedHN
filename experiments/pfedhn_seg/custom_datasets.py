@@ -6,6 +6,62 @@ import os
 from torchvision.transforms import transforms
 
 
+class BaseDataset(Dataset):
+    pass
+
+
+class PROSTATEx(Dataset):
+    """PROSTATEx Medical Dataset"""
+
+    def __init__(self, root_dir, train=True, transform=None, **kwargs):
+        """
+        Args:
+            root_dir (string): Directory with an inner dir named "PROSTATEx".
+                |- root_dir
+                |  |- PROSTATEx
+                |  |  |- Test
+                |  |  |- Train
+            train (bool): Whether to take the training dataset or the test dataset
+            transform (callable, optional): Optional transform to be applied on a sample.
+        """
+        # TODO: Save the data in this format also in cortex
+        self.root_dir = root_dir + "/PROSTATEx"
+        self.train_dir = self.root_dir + "/Train"
+        self.test_dir = self.root_dir + "/Test"
+
+        self.train = train
+        self.transform = transform
+
+        self.curr_dir = self.train_dir if self.train else self.test_dir
+
+        # TODO: maybe it's better to use subdirectories for each case
+        # TODO: create idx_to_case_map for this dataset
+        self.idx_to_case_map = ...
+
+    def __len__(self):
+        return len(self.idx_to_case_map)
+
+    def __getitem__(self, idx):
+        case_idx = self.idx_to_case_map[idx]
+
+        # TODO: make sure this case exists
+        if ...:
+            raise Exception(f"Case {case_idx} not in {'Train' if self.train else 'Test'} directory")
+
+        # TODO: read scans using pydicom
+        scans = sitk.GetArrayFromImage(sitk.ReadImage(f"{self.curr_dir}/Case{case_idx}.mhd", sitk.sitkFloat32))
+
+        # TODO: read annotations using nrrd
+        if self.train:
+            label_segmentations = sitk.GetArrayFromImage(
+                sitk.ReadImage(f"{self.curr_dir}/Case{case_idx}_segmentation.mhd",
+                               sitk.sitkFloat32))
+        else:
+            label_segmentations = None
+
+        return scans, label_segmentations
+
+
 class Promise12(Dataset):
     """Promise12 Medical Dataset"""
 
