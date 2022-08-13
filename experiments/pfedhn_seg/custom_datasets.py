@@ -1,5 +1,8 @@
 from torch.utils.data.dataset import Dataset
 import SimpleITK as sitk
+import nibabel as nib
+
+import numpy as np
 import matplotlib.pylab as plt
 import os
 
@@ -10,56 +13,63 @@ class BaseDataset(Dataset):
     pass
 
 
-class PROSTATEx(Dataset):
-    """PROSTATEx Medical Dataset"""
+class MedicalSegmentationDecathlon(Dataset):
+    """MedicalSegmentationDecathlon Dataset"""
 
     def __init__(self, root_dir, train=True, transform=None, **kwargs):
         """
         Args:
-            root_dir (string): Directory with an inner dir named "PROSTATEx".
+            root_dir (string): Directory with an inner dir named "MedicalSegmentationDecathlon".
                 |- root_dir
-                |  |- PROSTATEx
-                |  |  |- Test
-                |  |  |- Train
+                |  |- MedicalSegmentationDecathlon
+                |  |  |- imagesTr # Train images
+                |  |  |- imagesTs # Test images
+                |  |  |- labelsTr # Train labels
             train (bool): Whether to take the training dataset or the test dataset
             transform (callable, optional): Optional transform to be applied on a sample.
         """
         # TODO: Save the data in this format also in cortex
-        self.root_dir = root_dir + "/PROSTATEx"
-        self.train_dir = self.root_dir + "/Train"
-        self.test_dir = self.root_dir + "/Test"
+        self.root_dir = root_dir + "/MedicalSegmentationDecathlon"
+
+        self.train_imgs_dir = self.root_dir + "/imagesTr"
+        self.train_labels_dir = self.root_dir + "/labelsTr"
+        self.test_imgs_dir = self.root_dir + "/imagesTs"
 
         self.train = train
         self.transform = transform
 
-        self.curr_dir = self.train_dir if self.train else self.test_dir
+        self.curr_imgs_dir = self.train_imgs_dir if self.train else self.test_imgs_dir
 
-        # TODO: maybe it's better to use subdirectories for each case
-        # TODO: create idx_to_case_map for this dataset
-        self.idx_to_case_map = ...
+        file_names = [f for f in os.listdir(self.curr_imgs_dir) if f.endswith(".nii")]
+        self.idx_to_case_map = dict(enumerate(file_names))
 
     def __len__(self):
         return len(self.idx_to_case_map)
 
     def __getitem__(self, idx):
-        case_idx = self.idx_to_case_map[idx]
+        nii_file_name = self.idx_to_case_map[idx]
 
-        # TODO: make sure this case exists
-        if ...:
-            raise Exception(f"Case {case_idx} not in {'Train' if self.train else 'Test'} directory")
+        # read scan
+        orig_scans = nib.load(f"{self.curr_imgs_dir}/{nii_file_name}")
 
-        # TODO: read scans using pydicom
-        scans = sitk.GetArrayFromImage(sitk.ReadImage(f"{self.curr_dir}/Case{case_idx}.mhd", sitk.sitkFloat32))
+        # TODO: What is the difference between 0 and 1 at the last index? For now we use 0
+        np_scans = orig_scans.get_fdata()[:, :, :, 0]
 
-        # TODO: read annotations using nrrd
+        # swap axes to match the shape of other Datasets
+        np_scans = np.swapaxes(np_scans, 0, 2)
+
         if self.train:
-            label_segmentations = sitk.GetArrayFromImage(
-                sitk.ReadImage(f"{self.curr_dir}/Case{case_idx}_segmentation.mhd",
-                               sitk.sitkFloat32))
-        else:
-            label_segmentations = None
+            # read labels
+            orig_labels = nib.load(f"{self.curr_imgs_dir}/{nii_file_name}".replace("imagesTr", "labelsTr"))
 
-        return scans, label_segmentations
+            np_labels = orig_labels.get_fdata()
+            np_labels = np.swapaxes(np_labels, 0, 2)
+
+        else:
+            np_labels = None
+
+        return np_scans, np_labels
+
 
 
 class Promise12(Dataset):
@@ -86,7 +96,6 @@ class Promise12(Dataset):
 
         self.curr_dir = self.train_dir if self.train else self.test_dir
 
-        # TODO: maybe it's better to use subdirectories for each case
         file_names = os.listdir(self.curr_dir)
         nums_in_filenames = sorted(list(set([''.join(filter(lambda i: i.isdigit(), s)) for s in file_names])))
         self.idx_to_case_map = dict(enumerate(nums_in_filenames))
@@ -131,8 +140,8 @@ def test_plot_dataset(data_obj):
         transform=trans
     )
 
-    train_scans, train_seg = dataset[1]
-    test_scans, test_seg = test_set[1]
+    train_scans, train_seg = dataset[0]
+    test_scans, test_seg = test_set[0]
 
     print(train_scans.shape)
     print(train_seg.shape)
@@ -166,3 +175,4 @@ def test_plot_dataset(data_obj):
 
 if __name__ == '__main__':
     test_plot_dataset(Promise12)
+    test_plot_dataset(MedicalSegmentationDecathlon)
