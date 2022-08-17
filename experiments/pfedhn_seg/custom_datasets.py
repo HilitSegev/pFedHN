@@ -1,3 +1,7 @@
+import glob
+
+import nrrd
+import pydicom
 from torch.utils.data.dataset import Dataset
 import SimpleITK as sitk
 import nibabel as nib
@@ -11,6 +15,76 @@ from torchvision.transforms import transforms
 
 class BaseDataset(Dataset):
     pass
+
+
+class NciIsbi2013(Dataset):
+    """NCI-ISBI-2013 Dataset"""
+
+    def __init__(self, root_dir, train=True, transform=None, **kwargs):
+        """
+        Args:
+            root_dir (string): Directory with an inner dir named "NCI-ISBI-2013".
+                |- root_dir
+                |  |- NCI-ISBI-2013
+                |  |  |- ISBI-Prostate-Challenge-Training # Train images
+                |  |  |- ISBI-Prostate-Challenge-Testing # Test images
+                |  |  |- Labels
+                |  |  |- |- Test # Test labels
+                |  |  |- |- Train # Train labels
+
+            train (bool): Whether to take the training dataset or the test dataset
+            transform (callable, optional): Optional transform to be applied on a sample.
+        """
+        # TODO: Save the data in this format also in cortex
+        self.root_dir = root_dir + "/NCI-ISBI-2013"
+
+        self.train_imgs_dir = self.root_dir + "/ISBI-Prostate-Challenge-Training"
+        self.train_labels_dir = self.root_dir + "/Labels/Training"
+        self.test_imgs_dir = self.root_dir + "/ISBI-Prostate-Challenge-Testing"
+        self.test_labels_dir = self.root_dir + "/Labels/Test"
+
+        self.train = train
+        self.transform = transform
+
+        self.curr_imgs_dir = self.train_imgs_dir if self.train else self.test_imgs_dir
+
+        subdir_to_prefix = {
+            'Prostate-3T': 'Prostate3T',
+            'PROSTATE-DIAGNOSIS': 'ProstateDx'
+        }
+
+        file_names = sum([[f"{subdir}/{f}" for f in
+                           os.listdir(f"{self.curr_imgs_dir}/{subdir}") if f.startswith(subdir_to_prefix[subdir])] for
+                          subdir in subdir_to_prefix], [])
+        self.file_names = file_names
+        self.idx_to_case_map = dict(enumerate(file_names))
+
+    def __len__(self):
+        return len(self.idx_to_case_map)
+
+    def __getitem__(self, idx):
+        patient_dir = self.idx_to_case_map[idx]
+
+        dcm_files_list = glob.glob(f'{self.curr_imgs_dir}/{patient_dir}/**/*.dcm', recursive=True)
+        unstacked_list = []
+        for dicom_filepath in dcm_files_list:
+            # convert dicom file into jpg file
+            np_pixel_array = pydicom.read_file(dicom_filepath).pixel_array
+            unstacked_list.append(np_pixel_array)
+        np_scans = np.array(unstacked_list)
+
+        # swap axes to match the shape of other Datasets
+        # np_scans = np.swapaxes(np_scans, 0, 2)
+
+        if self.train:
+            # read labels
+            labels_path = [f for f in os.listdir(self.train_labels_dir) if f.startswith(patient_dir.split("/")[-1])][0]
+            np_labels, header = nrrd.read(f"{self.train_labels_dir}/{labels_path}")
+            np_labels = np.swapaxes(np_labels, 0, 2)
+        else:
+            np_labels = None
+
+        return np_scans, np_labels
 
 
 class MedicalSegmentationDecathlon(Dataset):
@@ -69,7 +143,6 @@ class MedicalSegmentationDecathlon(Dataset):
             np_labels = None
 
         return np_scans, np_labels
-
 
 
 class Promise12(Dataset):
@@ -174,5 +247,6 @@ def test_plot_dataset(data_obj):
 
 
 if __name__ == '__main__':
-    test_plot_dataset(Promise12)
-    test_plot_dataset(MedicalSegmentationDecathlon)
+    # test_plot_dataset(Promise12)
+    # test_plot_dataset(MedicalSegmentationDecathlon)
+    test_plot_dataset(NciIsbi2013)
