@@ -88,7 +88,7 @@ def train(data_names: List[str], data_path: str,
     if all([d in ALLOWED_DATASETS for d in data_names]):
         hnet = CNNHyper(len(nodes), embed_dim, hidden_dim=hyper_hid,
                         n_hidden=n_hidden, n_kernels=n_kernels, out_dim=100)
-        net = CNNTarget(n_kernels=n_kernels, out_dim=100)
+        net = CNNTarget(in_channels=1, out_channels=1, features=[64, 128, 256, 512])
     else:
         raise ValueError(f"choose data_name from {ALLOWED_DATASETS}")
 
@@ -131,7 +131,12 @@ def train(data_names: List[str], data_path: str,
 
         # produce & load local network weights
         weights = hnet(torch.tensor([node_id], dtype=torch.long).to(device))
-        net.load_state_dict(weights)
+
+        # keep the BatchNorm params in the state_dict
+        model_dict = net.state_dict()
+        model_dict.update(weights)
+        net.load_state_dict(model_dict)
+
 
         # init inner optimizer
         inner_optim = torch.optim.SGD(
