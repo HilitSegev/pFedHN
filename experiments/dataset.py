@@ -6,7 +6,7 @@ import torch.utils.data
 import torchvision.transforms as transforms
 from torchvision.datasets import CIFAR10, CIFAR100
 
-from experiments.pfedhn_seg.custom_datasets import Promise12
+from experiments.pfedhn_seg.custom_datasets import Promise12, MedicalSegmentationDecathlon, NciIsbi2013
 
 
 def get_datasets(data_name, dataroot, normalize=True, val_size=10000):
@@ -29,6 +29,18 @@ def get_datasets(data_name, dataroot, normalize=True, val_size=10000):
     elif data_name == 'promise12':
         normalization = transforms.Normalize((0, 0, 0), (1, 1, 1))
         data_obj = Promise12
+        # TODO: Change value of val_size to actual
+        val_size = 1
+    elif data_name == 'medical_segmentation_decathlon':
+        normalization = transforms.Normalize((0, 0, 0), (1, 1, 1))
+        data_obj = MedicalSegmentationDecathlon
+        # TODO: Change value of val_size to actual
+        val_size = 1
+    elif data_name == 'nci_isbi_2013':
+        normalization = transforms.Normalize((0, 0, 0), (1, 1, 1))
+        data_obj = NciIsbi2013
+        # TODO: Change value of val_size to actual
+        val_size = 1
     else:
         raise ValueError("choose data_name from ['promise12', 'cifar10', 'cifar100']")
 

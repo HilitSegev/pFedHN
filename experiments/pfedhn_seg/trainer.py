@@ -15,7 +15,7 @@ from experiments.pfedhn_seg.models import CNNHyper, CNNTarget
 from experiments.pfedhn_seg.node import BaseNodes
 from experiments.utils import get_device, set_logger, set_seed, str2bool
 
-ALLOWED_DATASETS = ['promise12', 'PROSTATEx']
+ALLOWED_DATASETS = ['promise12', 'medical_segmentation_decathlon', 'nci_isbi_2013']
 
 
 def eval_model(nodes, hnet, net, criteria, device, split):
@@ -260,7 +260,7 @@ if __name__ == '__main__':
     #############################
 
     parser.add_argument(
-        "--data-names", type=List[str], default=['promise12', 'PROSTATEx'],
+        "--data-names", type=List[str], default=['promise12', 'medical_segmentation_decathlon', 'nci_isbi_2013'],
         help="list of datasets to use for different clients"
     )
     parser.add_argument("--data-path", type=str, default="data", help="dir path for MNIST dataset")

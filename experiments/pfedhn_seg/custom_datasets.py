@@ -17,6 +17,71 @@ class BaseDataset(Dataset):
     pass
 
 
+class PROSTATEx(Dataset):
+    """PROSTATEx Dataset"""
+
+    def __init__(self, root_dir, train=True, transform=None, **kwargs):
+        """
+        Args:
+            root_dir (string): Directory with an inner dir named "PROSTATEx".
+                |- root_dir
+                |  |- PROSTATEx
+                |  |  |- Labels
+                |  |  |  |- PROSTATEx
+                |  |  |- Samples
+                |  |  |  |- PROSTATEx
+
+            train (bool): Whether to take the training dataset or the test dataset
+            transform (callable, optional): Optional transform to be applied on a sample.
+        """
+        # TODO: Save the data in this format also in cortex
+        self.root_dir = root_dir + "/PROSTATEx"
+
+        self.imgs_dir = self.root_dir + "/Samples" + "/PROSTATEx"
+        self.labels_dir = self.root_dir + "/Labels" + "/PROSTATEx"
+
+        self.train = train
+        self.transform = transform
+
+        file_names = [f for f in os.listdir(f"{self.imgs_dir}") if f.startswith("Prostate")]
+        self.file_names = file_names
+        self.idx_to_case_map = dict(enumerate(file_names))
+
+    def __len__(self):
+        return len(self.idx_to_case_map)
+
+    def __getitem__(self, idx):
+        patient_dir = self.idx_to_case_map[idx]
+
+        dcm_files_list = glob.glob(f'{self.imgs_dir}/{patient_dir}/**/*.dcm', recursive=True)
+
+        unstacked_list = []
+        for dicom_filepath in dcm_files_list:
+            # convert dicom file into jpg file
+            np_pixel_array = pydicom.read_file(dicom_filepath).pixel_array
+            unstacked_list.append(np_pixel_array)
+        np_scans = np.array(unstacked_list)
+
+        # swap axes to match the shape of other Datasets
+        # np_scans = np.swapaxes(np_scans, 0, 2)
+
+        if self.train:
+            # read labels
+            dicom_filepath = glob.glob(f'{self.labels_dir}/{patient_dir}/**/*.dcm', recursive=True)[0]
+
+            # convert dicom file into jpg file
+            # TODO: there are 4 segmentations, I'm not sure which one to use.
+            # Looking at the images, it seems that seg_id=1 is the closest to other datasets.
+            seg_id = 1
+            np_labels = pydicom.read_file(dicom_filepath).pixel_array[19 * seg_id:19 * (seg_id + 1), :, :]
+
+
+        else:
+            np_labels = None
+
+        return np_scans, np_labels
+
+
 class NciIsbi2013(Dataset):
     """NCI-ISBI-2013 Dataset"""
 
@@ -249,4 +314,5 @@ def test_plot_dataset(data_obj):
 if __name__ == '__main__':
     # test_plot_dataset(Promise12)
     # test_plot_dataset(MedicalSegmentationDecathlon)
-    test_plot_dataset(NciIsbi2013)
+    # test_plot_dataset(NciIsbi2013)
+    test_plot_dataset(PROSTATEx)
