@@ -18,16 +18,21 @@ from experiments.utils import get_device, set_logger, set_seed, str2bool
 ALLOWED_DATASETS = ['promise12', 'medical_segmentation_decathlon', 'nci_isbi_2013']
 
 
+def dice_loss_3d(pred_3d, label_3d):
+    return 2 * (((pred_3d > 0) * (label_3d > 0)).sum().item() + 1) / (
+            (pred_3d > 0).sum().item() + (label_3d > 0).sum().item() + 1)
+
+
 def eval_model(nodes, hnet, net, criteria, device, split):
     curr_results = evaluate(nodes, hnet, net, criteria, device, split=split)
-    total_correct = sum([val['correct'] for val in curr_results.values()])
-    total_samples = sum([val['total'] for val in curr_results.values()])
-    avg_loss = np.mean([val['loss'] for val in curr_results.values()])
-    avg_acc = total_correct / total_samples
+    avg_loss = (sum([node_res['total'] * node_res['loss'] for node_res in curr_results]) / sum(
+        [node_res['total'] for node_res in curr_results]))
+    avg_dice = (sum([node_res['total'] * node_res['mean_dice'] for node_res in curr_results]) / sum(
+        [node_res['total'] for node_res in curr_results]))
 
-    all_acc = [val['correct'] / val['total'] for val in curr_results.values()]
+    all_dice = [node_res['mean_dice'] for node_res in curr_results.values()]
 
-    return curr_results, avg_loss, avg_acc, all_acc
+    return curr_results, avg_loss, avg_dice, all_dice
 
 
 @torch.no_grad()
@@ -37,7 +42,7 @@ def evaluate(nodes: BaseNodes, hnet, net, criteria, device, split='test'):
 
     for node_id in range(len(nodes)):  # iterating over nodes
 
-        running_loss, running_correct, running_samples = 0., 0., 0.
+        running_loss, running_dice, running_samples = 0., 0., 0.
         if split == 'test':
             curr_data = nodes.test_loaders[node_id]
         elif split == 'val':
@@ -50,13 +55,17 @@ def evaluate(nodes: BaseNodes, hnet, net, criteria, device, split='test'):
 
             weights = hnet(torch.tensor([node_id], dtype=torch.long).to(device))
             net.load_state_dict(weights)
-            pred = net(img)
+            pred = net(img.float())
             running_loss += criteria(pred, label).item()
-            running_correct += pred.argmax(1).eq(label).sum().item()
+            # TODO: update to use dice loss (and update mean)
+            running_dice = (running_samples * running_dice + \
+                            len(label) * np.mean([dice_loss_3d(pred[i], label[i]) for i in range(pred.shape[0])])) \
+                           / (running_samples + len(label))
+            # running_correct += pred.argmax(1).eq(label).sum().item()
             running_samples += len(label)
 
         results[node_id]['loss'] = running_loss / (batch_count + 1)
-        results[node_id]['correct'] = running_correct
+        results[node_id]['mean_dice'] = running_dice
         results[node_id]['total'] = running_samples
 
     return results
@@ -88,7 +97,7 @@ def train(data_names: List[str], data_path: str,
     if all([d in ALLOWED_DATASETS for d in data_names]):
         hnet = CNNHyper(len(nodes), embed_dim, hidden_dim=hyper_hid,
                         n_hidden=n_hidden, n_kernels=n_kernels, out_dim=100)
-        net = CNNTarget(in_channels=1, out_channels=1, features=[64, 128, 256, 512])
+        net = CNNTarget(in_channels=15, out_channels=15, features=[64, 128, 256, 512])
     else:
         raise ValueError(f"choose data_name from {ALLOWED_DATASETS}")
 
@@ -117,7 +126,7 @@ def train(data_names: List[str], data_path: str,
     ################
     last_eval = -1
     best_step = -1
-    best_acc = -1
+    best_dice = -1
     test_best_based_on_step, test_best_min_based_on_step = -1, -1
     test_best_max_based_on_step, test_best_std_based_on_step = -1, -1
     step_iter = trange(steps)
@@ -137,7 +146,6 @@ def train(data_names: List[str], data_path: str,
         model_dict.update(weights)
         net.load_state_dict(model_dict)
 
-
         # init inner optimizer
         inner_optim = torch.optim.SGD(
             net.parameters(), lr=inner_lr, momentum=.9, weight_decay=inner_wd
@@ -151,9 +159,10 @@ def train(data_names: List[str], data_path: str,
             net.eval()
             batch = next(iter(nodes.test_loaders[node_id]))
             img, label = tuple(t.to(device) for t in batch)
-            pred = net(img)
+            pred = net(img.float())
             prvs_loss = criteria(pred, label)
-            prvs_acc = pred.argmax(1).eq(label).sum().item() / len(label)
+
+            prvs_acc = np.mean([dice_loss_3d(pred[i], label[i]) for i in range(pred.shape[0])])
             net.train()
 
         # inner updates -> obtaining theta_tilda
@@ -165,7 +174,7 @@ def train(data_names: List[str], data_path: str,
             batch = next(iter(nodes.train_loaders[node_id]))
             img, label = tuple(t.to(device) for t in batch)
 
-            pred = net(img)
+            pred = net(img.float())
 
             loss = criteria(pred, label)
             loss.backward()
@@ -198,52 +207,52 @@ def train(data_names: List[str], data_path: str,
 
         if step % eval_every == 0:
             last_eval = step
-            step_results, avg_loss, avg_acc, all_acc = eval_model(nodes, hnet, net, criteria, device,
+            step_results, avg_loss, avg_dice, all_dice = eval_model(nodes, hnet, net, criteria, device,
                                                                   split="test")
-            logging.info(f"\nStep: {step + 1}, AVG Loss: {avg_loss:.4f},  AVG Acc: {avg_acc:.4f}")
+            logging.info(f"\nStep: {step + 1}, AVG Loss: {avg_loss:.4f},  AVG Acc: {avg_dice:.4f}")
 
             results['test_avg_loss'].append(avg_loss)
-            results['test_avg_acc'].append(avg_acc)
+            results['test_avg_dice'].append(avg_dice)
 
-            _, val_avg_loss, val_avg_acc, _ = eval_model(nodes, hnet, net, criteria, device, split="val")
-            if best_acc < val_avg_acc:
-                best_acc = val_avg_acc
+            _, val_avg_loss, val_avg_dice, _ = eval_model(nodes, hnet, net, criteria, device, split="val")
+            if best_dice < val_avg_dice:
+                best_dice = val_avg_dice
                 best_step = step
-                test_best_based_on_step = avg_acc
-                test_best_min_based_on_step = np.min(all_acc)
-                test_best_max_based_on_step = np.max(all_acc)
-                test_best_std_based_on_step = np.std(all_acc)
+                test_best_based_on_step = val_avg_dice
+                test_best_min_based_on_step = np.min(all_dice)
+                test_best_max_based_on_step = np.max(all_dice)
+                test_best_std_based_on_step = np.std(all_dice)
 
             results['val_avg_loss'].append(val_avg_loss)
-            results['val_avg_acc'].append(val_avg_acc)
+            results['val_avg_acc'].append(val_avg_dice)
             results['best_step'].append(best_step)
-            results['best_val_acc'].append(best_acc)
+            results['best_val_acc'].append(best_dice)
             results['best_test_acc_based_on_val_beststep'].append(test_best_based_on_step)
             results['test_best_min_based_on_step'].append(test_best_min_based_on_step)
             results['test_best_max_based_on_step'].append(test_best_max_based_on_step)
             results['test_best_std_based_on_step'].append(test_best_std_based_on_step)
 
     if step != last_eval:
-        _, val_avg_loss, val_avg_acc, _ = eval_model(nodes, hnet, net, criteria, device, split="val")
-        step_results, avg_loss, avg_acc, all_acc = eval_model(nodes, hnet, net, criteria, device,
+        _, val_avg_loss, val_avg_dice, _ = eval_model(nodes, hnet, net, criteria, device, split="val")
+        step_results, avg_loss, avg_dice, all_dice = eval_model(nodes, hnet, net, criteria, device,
                                                               split="test")
-        logging.info(f"\nStep: {step + 1}, AVG Loss: {avg_loss:.4f},  AVG Acc: {avg_acc:.4f}")
+        logging.info(f"\nStep: {step + 1}, AVG Loss: {avg_loss:.4f},  AVG Acc: {avg_dice:.4f}")
 
         results['test_avg_loss'].append(avg_loss)
-        results['test_avg_acc'].append(avg_acc)
+        results['test_avg_acc'].append(avg_dice)
 
-        if best_acc < val_avg_acc:
-            best_acc = val_avg_acc
+        if best_dice < val_avg_dice:
+            best_dice = val_avg_dice
             best_step = step
-            test_best_based_on_step = avg_acc
-            test_best_min_based_on_step = np.min(all_acc)
-            test_best_max_based_on_step = np.max(all_acc)
-            test_best_std_based_on_step = np.std(all_acc)
+            test_best_based_on_step = avg_dice
+            test_best_min_based_on_step = np.min(all_dice)
+            test_best_max_based_on_step = np.max(all_dice)
+            test_best_std_based_on_step = np.std(all_dice)
 
         results['val_avg_loss'].append(val_avg_loss)
-        results['val_avg_acc'].append(val_avg_acc)
+        results['val_avg_acc'].append(val_avg_dice)
         results['best_step'].append(best_step)
-        results['best_val_acc'].append(best_acc)
+        results['best_val_acc'].append(best_dice)
         results['best_test_acc_based_on_val_beststep'].append(test_best_based_on_step)
         results['test_best_min_based_on_step'].append(test_best_min_based_on_step)
         results['test_best_max_based_on_step'].append(test_best_max_based_on_step)
@@ -277,7 +286,8 @@ if __name__ == '__main__':
     parser.add_argument("--num-steps", type=int, default=5000)
     parser.add_argument("--optim", type=str, default='sgd', choices=['adam', 'sgd'], help="learning rate")
     parser.add_argument("--batch-size", type=int, default=64)
-    parser.add_argument("--inner-steps", type=int, default=50, help="number of inner steps")
+    # TODO: change to 50
+    parser.add_argument("--inner-steps", type=int, default=2, help="number of inner steps")
 
     ################################
     #       Model Prop args        #

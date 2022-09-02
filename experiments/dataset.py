@@ -60,7 +60,7 @@ def get_datasets(data_name, dataroot, normalize=True, val_size=10000):
 
     test_set = data_obj(
         dataroot,
-        train=False,
+        train=True,
         download=True,
         transform=transform
     )

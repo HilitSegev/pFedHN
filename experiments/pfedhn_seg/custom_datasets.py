@@ -12,6 +12,16 @@ import os
 
 from torchvision.transforms import transforms
 
+MRI_SCAN_SHAPE = (15, 320, 320)
+
+
+def random_crop(arr, shape):
+    assert len(arr.shape) == len(shape)
+    for i in range(len(shape)):
+        assert shape[i] <= arr.shape[i]
+    idx = [np.random.randint(0, arr.shape[i] - shape[i]) if arr.shape[i] > shape[i] else 0 for i in range(len(shape))]
+    return arr[[slice(idx[i], idx[i] + shape[i]) for i in range(len(shape))]]
+
 
 class BaseDataset(Dataset):
     pass
@@ -60,7 +70,7 @@ class PROSTATEx(Dataset):
             # convert dicom file into jpg file
             np_pixel_array = pydicom.read_file(dicom_filepath).pixel_array
             unstacked_list.append(np_pixel_array)
-        np_scans = np.array(unstacked_list)
+        np_scans = np.array(unstacked_list).astype(float)
 
         # swap axes to match the shape of other Datasets
         # np_scans = np.swapaxes(np_scans, 0, 2)
@@ -73,13 +83,12 @@ class PROSTATEx(Dataset):
             # TODO: there are 4 segmentations, I'm not sure which one to use.
             # Looking at the images, it seems that seg_id=1 is the closest to other datasets.
             seg_id = 1
-            np_labels = pydicom.read_file(dicom_filepath).pixel_array[19 * seg_id:19 * (seg_id + 1), :, :]
-
-
+            np_labels = pydicom.read_file(dicom_filepath).pixel_array[19 * seg_id:19 * (seg_id + 1), :, :].astype(float)
+            np_labels = random_crop(np_labels, MRI_SCAN_SHAPE)
         else:
             np_labels = None
 
-        return np_scans, np_labels
+        return random_crop(np_scans, MRI_SCAN_SHAPE), np_labels
 
 
 class NciIsbi2013(Dataset):
@@ -136,7 +145,7 @@ class NciIsbi2013(Dataset):
             # convert dicom file into jpg file
             np_pixel_array = pydicom.read_file(dicom_filepath).pixel_array
             unstacked_list.append(np_pixel_array)
-        np_scans = np.array(unstacked_list)
+        np_scans = np.array(unstacked_list).astype(float)
 
         # swap axes to match the shape of other Datasets
         # np_scans = np.swapaxes(np_scans, 0, 2)
@@ -145,11 +154,13 @@ class NciIsbi2013(Dataset):
             # read labels
             labels_path = [f for f in os.listdir(self.train_labels_dir) if f.startswith(patient_dir.split("/")[-1])][0]
             np_labels, header = nrrd.read(f"{self.train_labels_dir}/{labels_path}")
-            np_labels = np.swapaxes(np_labels, 0, 2)
+            np_labels = np.swapaxes(np_labels, 0, 2).astype(float)
+            np_labels = random_crop(np_labels, MRI_SCAN_SHAPE)
+
         else:
             np_labels = None
 
-        return np_scans, np_labels
+        return random_crop(np_scans, MRI_SCAN_SHAPE), np_labels
 
 
 class MedicalSegmentationDecathlon(Dataset):
@@ -203,11 +214,13 @@ class MedicalSegmentationDecathlon(Dataset):
 
             np_labels = orig_labels.get_fdata()
             np_labels = np.swapaxes(np_labels, 0, 2)
+            np_labels = random_crop(np_labels, MRI_SCAN_SHAPE)
+
 
         else:
             np_labels = None
 
-        return np_scans, np_labels
+        return random_crop(np_scans, MRI_SCAN_SHAPE), np_labels
 
 
 class Promise12(Dataset):
@@ -253,10 +266,12 @@ class Promise12(Dataset):
             label_segmentations = sitk.GetArrayFromImage(
                 sitk.ReadImage(f"{self.curr_dir}/Case{case_idx}_segmentation.mhd",
                                sitk.sitkFloat32))
+            label_segmentations = random_crop(label_segmentations, MRI_SCAN_SHAPE)
+
         else:
             label_segmentations = None
 
-        return scans, label_segmentations
+        return random_crop(scans, MRI_SCAN_SHAPE), label_segmentations
 
 
 def test_plot_dataset(data_obj):
@@ -313,6 +328,6 @@ def test_plot_dataset(data_obj):
 
 if __name__ == '__main__':
     # test_plot_dataset(Promise12)
-    # test_plot_dataset(MedicalSegmentationDecathlon)
-    # test_plot_dataset(NciIsbi2013)
+    test_plot_dataset(MedicalSegmentationDecathlon)
+    test_plot_dataset(NciIsbi2013)
     test_plot_dataset(PROSTATEx)
