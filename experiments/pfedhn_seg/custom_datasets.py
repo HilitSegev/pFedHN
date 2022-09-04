@@ -1,4 +1,6 @@
 import glob
+import random
+random.seed(1234)
 
 import nrrd
 import pydicom
@@ -54,8 +56,12 @@ class PROSTATEx(Dataset):
         self.transform = transform
 
         file_names = [f for f in os.listdir(f"{self.imgs_dir}") if f.startswith("Prostate")]
-        self.file_names = file_names
-        self.idx_to_case_map = dict(enumerate(file_names))
+
+        test_files = random.sample(file_names, int(len(file_names) * 0.2))
+        train_files = [f for f in file_names if f not in test_files]
+        self.file_names = train_files if self.train else test_files
+
+        self.idx_to_case_map = dict(enumerate(self.file_names))
 
     def __len__(self):
         return len(self.idx_to_case_map)
@@ -127,8 +133,12 @@ class NciIsbi2013(Dataset):
         file_names = sum([[f"{subdir}/{f}" for f in
                            os.listdir(f"{self.curr_imgs_dir}/{subdir}") if f.startswith(subdir_to_prefix[subdir])] for
                           subdir in subdir_to_prefix], [])
-        self.file_names = file_names
-        self.idx_to_case_map = dict(enumerate(file_names))
+
+        test_files = random.sample(file_names, int(len(file_names) * 0.2))
+        train_files = [f for f in file_names if f not in test_files]
+        self.file_names = train_files if self.train else test_files
+
+        self.idx_to_case_map = dict(enumerate(self.file_names))
 
     def __len__(self):
         return len(self.idx_to_case_map)
@@ -184,7 +194,12 @@ class MedicalSegmentationDecathlon(Dataset):
         self.curr_imgs_dir = self.train_imgs_dir if self.train else self.test_imgs_dir
 
         file_names = [f for f in os.listdir(self.curr_imgs_dir) if f.endswith(".nii")]
-        self.idx_to_case_map = dict(enumerate(file_names))
+
+        test_files = random.sample(file_names, int(len(file_names) * 0.2))
+        train_files = [f for f in file_names if f not in test_files]
+        self.file_names = train_files if self.train else test_files
+
+        self.idx_to_case_map = dict(enumerate(self.file_names))
 
     def __len__(self):
         return len(self.idx_to_case_map)
@@ -207,8 +222,6 @@ class MedicalSegmentationDecathlon(Dataset):
         np_labels = orig_labels.get_fdata()
         np_labels = np.swapaxes(np_labels, 0, 2)
         np_labels = random_crop(np_labels, MRI_SCAN_SHAPE)
-
-
 
         return random_crop(np_scans, MRI_SCAN_SHAPE), np_labels
 
@@ -239,7 +252,12 @@ class Promise12(Dataset):
 
         file_names = os.listdir(self.curr_dir)
         nums_in_filenames = sorted(list(set([''.join(filter(lambda i: i.isdigit(), s)) for s in file_names])))
-        self.idx_to_case_map = dict(enumerate(nums_in_filenames))
+
+        test_files = random.sample(nums_in_filenames, int(len(nums_in_filenames) * 0.2))
+        train_files = [f for f in nums_in_filenames if f not in test_files]
+        self.nums_in_filenames = train_files if self.train else test_files
+
+        self.idx_to_case_map = dict(enumerate(self.nums_in_filenames))
 
     def __len__(self):
         return len(self.idx_to_case_map)
