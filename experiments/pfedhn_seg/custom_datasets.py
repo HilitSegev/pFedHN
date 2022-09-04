@@ -75,18 +75,15 @@ class PROSTATEx(Dataset):
         # swap axes to match the shape of other Datasets
         # np_scans = np.swapaxes(np_scans, 0, 2)
 
-        if self.train:
-            # read labels
-            dicom_filepath = glob.glob(f'{self.labels_dir}/{patient_dir}/**/*.dcm', recursive=True)[0]
+        # read labels
+        dicom_filepath = glob.glob(f'{self.labels_dir}/{patient_dir}/**/*.dcm', recursive=True)[0]
 
-            # convert dicom file into jpg file
-            # TODO: there are 4 segmentations, I'm not sure which one to use.
-            # Looking at the images, it seems that seg_id=1 is the closest to other datasets.
-            seg_id = 1
-            np_labels = pydicom.read_file(dicom_filepath).pixel_array[19 * seg_id:19 * (seg_id + 1), :, :].astype(float)
-            np_labels = random_crop(np_labels, MRI_SCAN_SHAPE)
-        else:
-            np_labels = None
+        # convert dicom file into jpg file
+        # TODO: there are 4 segmentations, I'm not sure which one to use.
+        # Looking at the images, it seems that seg_id=1 is the closest to other datasets.
+        seg_id = 1
+        np_labels = pydicom.read_file(dicom_filepath).pixel_array[19 * seg_id:19 * (seg_id + 1), :, :].astype(float)
+        np_labels = random_crop(np_labels, MRI_SCAN_SHAPE)
 
         return random_crop(np_scans, MRI_SCAN_SHAPE), np_labels
 
@@ -150,15 +147,11 @@ class NciIsbi2013(Dataset):
         # swap axes to match the shape of other Datasets
         # np_scans = np.swapaxes(np_scans, 0, 2)
 
-        if self.train:
-            # read labels
-            labels_path = [f for f in os.listdir(self.train_labels_dir) if f.startswith(patient_dir.split("/")[-1])][0]
-            np_labels, header = nrrd.read(f"{self.train_labels_dir}/{labels_path}")
-            np_labels = np.swapaxes(np_labels, 0, 2).astype(float)
-            np_labels = random_crop(np_labels, MRI_SCAN_SHAPE)
-
-        else:
-            np_labels = None
+        # read labels
+        labels_path = [f for f in os.listdir(self.train_labels_dir) if f.startswith(patient_dir.split("/")[-1])][0]
+        np_labels, header = nrrd.read(f"{self.train_labels_dir}/{labels_path}")
+        np_labels = np.swapaxes(np_labels, 0, 2).astype(float)
+        np_labels = random_crop(np_labels, MRI_SCAN_SHAPE)
 
         return random_crop(np_scans, MRI_SCAN_SHAPE), np_labels
 
@@ -208,17 +201,14 @@ class MedicalSegmentationDecathlon(Dataset):
         # swap axes to match the shape of other Datasets
         np_scans = np.swapaxes(np_scans, 0, 2)
 
-        if self.train:
-            # read labels
-            orig_labels = nib.load(f"{self.curr_imgs_dir}/{nii_file_name}".replace("imagesTr", "labelsTr"))
+        # read labels
+        orig_labels = nib.load(f"{self.curr_imgs_dir}/{nii_file_name}".replace("imagesTr", "labelsTr"))
 
-            np_labels = orig_labels.get_fdata()
-            np_labels = np.swapaxes(np_labels, 0, 2)
-            np_labels = random_crop(np_labels, MRI_SCAN_SHAPE)
+        np_labels = orig_labels.get_fdata()
+        np_labels = np.swapaxes(np_labels, 0, 2)
+        np_labels = random_crop(np_labels, MRI_SCAN_SHAPE)
 
 
-        else:
-            np_labels = None
 
         return random_crop(np_scans, MRI_SCAN_SHAPE), np_labels
 
@@ -262,14 +252,10 @@ class Promise12(Dataset):
 
         scans = sitk.GetArrayFromImage(sitk.ReadImage(f"{self.curr_dir}/Case{case_idx}.mhd", sitk.sitkFloat32))
 
-        if self.train:
-            label_segmentations = sitk.GetArrayFromImage(
-                sitk.ReadImage(f"{self.curr_dir}/Case{case_idx}_segmentation.mhd",
-                               sitk.sitkFloat32))
-            label_segmentations = random_crop(label_segmentations, MRI_SCAN_SHAPE)
-
-        else:
-            label_segmentations = None
+        label_segmentations = sitk.GetArrayFromImage(
+            sitk.ReadImage(f"{self.curr_dir}/Case{case_idx}_segmentation.mhd",
+                           sitk.sitkFloat32))
+        label_segmentations = random_crop(label_segmentations, MRI_SCAN_SHAPE)
 
         return random_crop(scans, MRI_SCAN_SHAPE), label_segmentations
 
@@ -322,6 +308,14 @@ def test_plot_dataset(data_obj):
     plt.subplots_adjust(0, 0, 1, 1, 0.01, 0.01)
     for i in range(test_scans.shape[0]):
         plt.subplot(5, 6, i + 1), plt.imshow(test_scans[i]), plt.axis('off')
+        # use plt.savefig(...) here if you want to save the images as .jpg, e.g.,
+    plt.show()
+
+    plt.figure(figsize=(20, 16))
+    plt.gray()
+    plt.subplots_adjust(0, 0, 1, 1, 0.01, 0.01)
+    for i in range(test_seg.shape[0]):
+        plt.subplot(5, 6, i + 1), plt.imshow(test_seg[i]), plt.axis('off')
         # use plt.savefig(...) here if you want to save the images as .jpg, e.g.,
     plt.show()
 
