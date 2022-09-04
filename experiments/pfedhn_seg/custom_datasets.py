@@ -123,7 +123,7 @@ class NciIsbi2013(Dataset):
         self.train = train
         self.transform = transform
 
-        self.curr_imgs_dir = self.train_imgs_dir if self.train else self.test_imgs_dir
+        self.curr_imgs_dir = self.train_imgs_dir
 
         subdir_to_prefix = {
             'Prostate-3T': 'Prostate3T',
@@ -191,7 +191,7 @@ class MedicalSegmentationDecathlon(Dataset):
         self.train = train
         self.transform = transform
 
-        self.curr_imgs_dir = self.train_imgs_dir if self.train else self.test_imgs_dir
+        self.curr_imgs_dir = self.train_imgs_dir
 
         file_names = [f for f in os.listdir(self.curr_imgs_dir) if f.endswith(".nii")]
 
@@ -248,7 +248,7 @@ class Promise12(Dataset):
         self.train = train
         self.transform = transform
 
-        self.curr_dir = self.train_dir if self.train else self.test_dir
+        self.curr_dir = self.train_dir
 
         file_names = os.listdir(self.curr_dir)
         nums_in_filenames = sorted(list(set([''.join(filter(lambda i: i.isdigit(), s)) for s in file_names])))
