@@ -132,6 +132,7 @@ def train(data_names: List[str], data_path: str,
     step_iter = trange(steps)
 
     results = defaultdict(list)
+    print(f"Starting training with {len(nodes)} nodes")
     for step in step_iter:
         hnet.train()
 
@@ -140,6 +141,7 @@ def train(data_names: List[str], data_path: str,
 
         # produce & load local network weights
         weights = hnet(torch.tensor([node_id], dtype=torch.long).to(device))
+        print(f"weights are assigned!")
 
         # keep the BatchNorm params in the state_dict
         model_dict = net.state_dict()
@@ -166,6 +168,7 @@ def train(data_names: List[str], data_path: str,
             net.train()
 
         # inner updates -> obtaining theta_tilda
+        print(f"starting with inner steps")
         for i in range(inner_steps):
             net.train()
             inner_optim.zero_grad()
@@ -185,7 +188,7 @@ def train(data_names: List[str], data_path: str,
         optimizer.zero_grad()
 
         final_state = net.state_dict()
-
+        print("done with inner steps")
         # calculating delta theta
         delta_theta = OrderedDict({k: inner_state[k] - final_state[k] for k in weights.keys()})
 
@@ -200,7 +203,7 @@ def train(data_names: List[str], data_path: str,
 
         torch.nn.utils.clip_grad_norm_(hnet.parameters(), 50)
         optimizer.step()
-
+        print("done with hnet update")
         step_iter.set_description(
             f"Step: {step + 1}, Node ID: {node_id}, Loss: {prvs_loss:.4f},  Acc: {prvs_acc:.4f}"
         )
