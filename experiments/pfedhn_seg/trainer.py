@@ -25,9 +25,9 @@ def dice_loss_3d(pred_3d, label_3d):
 
 def eval_model(nodes, hnet, net, criteria, device, split):
     curr_results = evaluate(nodes, hnet, net, criteria, device, split=split)
-    avg_loss = (sum([node_res['total'] * node_res['loss'] for node_res in curr_results]) / sum(
+    avg_loss = (sum([node_res['total'] * node_res['loss'] for node_res in curr_results.values()]) / sum(
         [node_res['total'] for node_res in curr_results]))
-    avg_dice = (sum([node_res['total'] * node_res['mean_dice'] for node_res in curr_results]) / sum(
+    avg_dice = (sum([node_res['total'] * node_res['mean_dice'] for node_res in curr_results.values()]) / sum(
         [node_res['total'] for node_res in curr_results]))
 
     all_dice = [node_res['mean_dice'] for node_res in curr_results.values()]
@@ -137,7 +137,7 @@ def train(data_names: List[str], data_path: str,
     step_iter = trange(steps)
 
     results = defaultdict(list)
-    print(f"Starting training with {len(nodes)} nodes")
+    logging.info(f"Starting training with {len(nodes)} nodes")
     for step in step_iter:
         hnet.train()
 
@@ -146,7 +146,7 @@ def train(data_names: List[str], data_path: str,
 
         # produce & load local network weights
         weights = hnet(torch.tensor([node_id], dtype=torch.long).to(device))
-        print(f"weights are assigned!")
+        logging.info(f"weights are assigned!")
 
         # keep the BatchNorm params in the state_dict
         model_dict = net.state_dict()
@@ -173,7 +173,7 @@ def train(data_names: List[str], data_path: str,
             net.train()
 
         # inner updates -> obtaining theta_tilda
-        print(f"starting with inner steps")
+        logging.info(f"starting with inner steps")
         for i in range(inner_steps):
             net.train()
             inner_optim.zero_grad()
@@ -193,7 +193,7 @@ def train(data_names: List[str], data_path: str,
         optimizer.zero_grad()
 
         final_state = net.state_dict()
-        print("done with inner steps")
+        logging.info("done with inner steps")
         # calculating delta theta
         delta_theta = OrderedDict({k: inner_state[k] - final_state[k] for k in weights.keys()})
 
@@ -210,7 +210,7 @@ def train(data_names: List[str], data_path: str,
         # TODO: is this the way to reduce memory?
         torch.cuda.empty_cache()
         optimizer.step()
-        print("done with hnet update")
+        logging.info("done with hnet update")
         step_iter.set_description(
             f"Step: {step + 1}, Node ID: {node_id}, Loss: {prvs_loss:.4f},  Acc: {prvs_acc:.4f}"
         )
