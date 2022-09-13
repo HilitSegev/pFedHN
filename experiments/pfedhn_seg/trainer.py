@@ -202,6 +202,8 @@ def train(data_names: List[str], data_path: str,
             p.grad = g
 
         torch.nn.utils.clip_grad_norm_(hnet.parameters(), 50)
+        # TODO: is this the way to reduce memory?
+        torch.cuda.empty_cache()
         optimizer.step()
         print("done with hnet update")
         step_iter.set_description(
