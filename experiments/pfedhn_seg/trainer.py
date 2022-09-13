@@ -54,7 +54,12 @@ def evaluate(nodes: BaseNodes, hnet, net, criteria, device, split='test'):
             img, label = tuple(t.to(device) for t in batch)
 
             weights = hnet(torch.tensor([node_id], dtype=torch.long).to(device))
-            net.load_state_dict(weights)
+
+            # keep the BatchNorm params in the state_dict
+            model_dict = net.state_dict()
+            model_dict.update(weights)
+            net.load_state_dict(model_dict)
+
             pred = net(img.float())
             running_loss += criteria(pred, label).item()
             # TODO: update to use dice loss (and update mean)
