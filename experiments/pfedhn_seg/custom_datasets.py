@@ -3,7 +3,9 @@ import random
 random.seed(1234)
 
 import nrrd
+import cv2
 import pydicom
+from scipy import ndimage as nd
 from torch.utils.data.dataset import Dataset
 import SimpleITK as sitk
 import nibabel as nib
@@ -17,19 +19,24 @@ from torchvision.transforms import transforms
 MRI_SCAN_SHAPE = (15, 128, 128)
 
 
-def random_crop(arr, shape, idx=None):
+def random_crop(arr, shape, idx=None, crop=False):
     assert len(arr.shape) == len(shape)
-    for i in range(len(shape)):
-        try:
-            assert shape[i] <= arr.shape[i]
-        except AssertionError:
-            print(f"arr.shape = {arr.shape}")
-            print(f"shape = {shape}")
-            raise AssertionError
-    if idx is None:
-        idx = [np.random.randint(0, arr.shape[i] - shape[i]) if arr.shape[i] > shape[i] else 0 for i in range(len(shape))]
-    return arr[[slice(idx[i], idx[i] + shape[i]) for i in range(len(shape))]], idx
-
+    if crop:
+        for i in range(len(shape)):
+            try:
+                assert shape[i] <= arr.shape[i]
+            except AssertionError:
+                print(f"arr.shape = {arr.shape}")
+                print(f"shape = {shape}")
+                raise AssertionError
+        if idx is None:
+            idx = [np.random.randint(0, arr.shape[i] - shape[i]) if arr.shape[i] > shape[i] else 0 for i in range(len(shape))]
+        return arr[[slice(idx[i], idx[i] + shape[i]) for i in range(len(shape))]], idx
+    else:
+        # resize image to "shape"
+        dsfactor = [w / float(f) for w, f in zip(shape, arr.shape)]
+        downed = nd.interpolation.zoom(arr, zoom=dsfactor)
+        return downed, idx
 
 class BaseDataset(Dataset):
     pass
@@ -309,7 +316,7 @@ def test_plot_dataset(data_obj):
     print(train_scans.shape)
     print(train_seg.shape)
     print(test_scans.shape)
-    print(test_seg)
+    print(test_seg.shape)
 
     plt.figure(figsize=(20, 16))
     plt.gray()
