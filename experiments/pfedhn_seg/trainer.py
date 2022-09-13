@@ -26,9 +26,9 @@ def dice_loss_3d(pred_3d, label_3d):
 def eval_model(nodes, hnet, net, criteria, device, split):
     curr_results = evaluate(nodes, hnet, net, criteria, device, split=split)
     avg_loss = (sum([node_res['total'] * node_res['loss'] for node_res in curr_results.values()]) / sum(
-        [node_res['total'] for node_res in curr_results]))
+        [node_res['total'] for node_res in curr_results.values()]))
     avg_dice = (sum([node_res['total'] * node_res['mean_dice'] for node_res in curr_results.values()]) / sum(
-        [node_res['total'] for node_res in curr_results]))
+        [node_res['total'] for node_res in curr_results.values()]))
 
     all_dice = [node_res['mean_dice'] for node_res in curr_results.values()]
 
