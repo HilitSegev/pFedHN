@@ -97,7 +97,7 @@ def train(data_names: List[str], data_path: str,
     if all([d in ALLOWED_DATASETS for d in data_names]):
         hnet = CNNHyper(len(nodes), embed_dim, hidden_dim=hyper_hid,
                         n_hidden=n_hidden, n_kernels=n_kernels, out_dim=100)
-        net = CNNTarget(in_channels=15, out_channels=15, features=[64, 128, 256, 512])
+        net = CNNTarget(in_channels=15, out_channels=15, features=[4, 8, 16, 32])
     else:
         raise ValueError(f"choose data_name from {ALLOWED_DATASETS}")
 
