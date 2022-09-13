@@ -35,7 +35,7 @@ def random_crop(arr, shape, idx=None, crop=False):
     else:
         # resize image to "shape"
         dsfactor = [w / float(f) for w, f in zip(shape, arr.shape)]
-        downed = nd.interpolation.zoom(arr, zoom=dsfactor)
+        downed = nd.zoom(arr, zoom=dsfactor)
         return downed, idx
 
 class BaseDataset(Dataset):
