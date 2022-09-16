@@ -1,4 +1,5 @@
 import argparse
+import datetime
 import json
 import logging
 import random
@@ -16,6 +17,7 @@ from experiments.pfedhn_seg.node import BaseNodes
 from experiments.utils import get_device, set_logger, set_seed, str2bool
 
 ALLOWED_DATASETS = ['promise12', 'medical_segmentation_decathlon', 'nci_isbi_2013']
+logging.basicConfig(filename=f'run_{str(datetime.datetime.now())}.log', level=logging.INFO)
 
 
 def dice_loss_3d(pred_3d, label_3d):
