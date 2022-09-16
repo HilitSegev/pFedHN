@@ -216,7 +216,7 @@ def train(data_names: List[str], data_path: str,
             step_results, avg_loss, avg_dice, all_dice = eval_model(nodes, hnet, net, criteria, device,
                                                                     split="test")
             logging.info(f"\nStep: {step + 1}, AVG Loss: {avg_loss:.4f},  AVG Dice: {avg_dice:.4f}")
-
+            print(f"\nStep: {step + 1}, AVG Loss: {avg_loss:.4f},  AVG Dice: {avg_dice:.4f}")
             results['test_avg_loss'].append(avg_loss)
             results['test_avg_dice'].append(avg_dice)
 
