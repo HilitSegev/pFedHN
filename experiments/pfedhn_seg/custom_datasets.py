@@ -35,7 +35,7 @@ def random_crop(arr, shape, idx=None, crop=False):
     else:
         # resize image to "shape"
         dsfactor = [w / float(f) for w, f in zip(shape, arr.shape)]
-        downed = nd.zoom(arr, zoom=dsfactor)
+        downed = np.round(nd.zoom(arr, zoom=dsfactor))
         return downed, idx
 
 class BaseDataset(Dataset):
@@ -174,6 +174,10 @@ class NciIsbi2013(Dataset):
         labels_path = [f for f in os.listdir(self.train_labels_dir) if f.startswith(patient_dir.split("/")[-1])][0]
         np_labels, header = nrrd.read(f"{self.train_labels_dir}/{labels_path}")
         np_labels = np.swapaxes(np_labels, 0, 2).astype(float)
+
+        # remove labels of 2
+        np_labels = np.where(np_labels == 2, 1, np_labels)
+
         np_labels, idx = random_crop(np_labels, MRI_SCAN_SHAPE)
 
         return random_crop(np_scans, MRI_SCAN_SHAPE, idx)[0], np_labels
@@ -195,7 +199,7 @@ class MedicalSegmentationDecathlon(Dataset):
             transform (callable, optional): Optional transform to be applied on a sample.
         """
         # TODO: Save the data in this format also in cortex
-        self.root_dir = root_dir + "/MedicalSegmentationDecathlon/Task05_Prostate"
+        self.root_dir = root_dir + "/MedicalSegmentationDecathlon" #/Task05_Prostate"
 
         self.train_imgs_dir = self.root_dir + "/imagesTr"
         self.train_labels_dir = self.root_dir + "/labelsTr"
@@ -234,6 +238,9 @@ class MedicalSegmentationDecathlon(Dataset):
 
         np_labels = orig_labels.get_fdata()
         np_labels = np.swapaxes(np_labels, 0, 2)
+
+        # rmove labels of 2
+        np_labels = np.where(np_labels == 2, 1, np_labels)
         np_labels, idx = random_crop(np_labels, MRI_SCAN_SHAPE)
 
         return random_crop(np_scans, MRI_SCAN_SHAPE, idx)[0], np_labels
@@ -313,10 +320,12 @@ def test_plot_dataset(data_obj):
     train_scans, train_seg = dataset[0]
     test_scans, test_seg = test_set[0]
 
+    print(data_obj)
     print(train_scans.shape)
     print(train_seg.shape)
     print(test_scans.shape)
     print(test_seg.shape)
+
 
     plt.figure(figsize=(20, 16))
     plt.gray()
@@ -352,7 +361,7 @@ def test_plot_dataset(data_obj):
 
 
 if __name__ == '__main__':
-    # test_plot_dataset(Promise12)
+    test_plot_dataset(Promise12)
     test_plot_dataset(MedicalSegmentationDecathlon)
     test_plot_dataset(NciIsbi2013)
     test_plot_dataset(PROSTATEx)

@@ -19,8 +19,8 @@ ALLOWED_DATASETS = ['promise12', 'medical_segmentation_decathlon', 'nci_isbi_201
 
 
 def dice_loss_3d(pred_3d, label_3d):
-    return 2 * (((pred_3d > 0) * (label_3d > 0)).sum().item() + 1) / (
-            (pred_3d > 0).sum().item() + (label_3d > 0).sum().item() + 1)
+    return 2 * (((pred_3d > 0.5) * (label_3d > 0.5)).sum().item() + 1) / (
+            (pred_3d > 0.5).sum().item() + (label_3d > 0.5).sum().item() + 1)
 
 
 def eval_model(nodes, hnet, net, criteria, device, split):
@@ -91,14 +91,6 @@ def train(data_names: List[str], data_path: str,
         logging.info("auto embedding size")
         embed_dim = int(1 + len(nodes) / 4)
 
-    # TODO: Define models for the segmentation problem
-    # if data_name == "cifar10":
-    #     hnet = CNNHyper(num_nodes, embed_dim, hidden_dim=hyper_hid, n_hidden=n_hidden, n_kernels=n_kernels)
-    #     net = CNNTarget(n_kernels=n_kernels)
-    # elif data_name == "cifar100":
-    #     hnet = CNNHyper(num_nodes, embed_dim, hidden_dim=hyper_hid,
-    #                     n_hidden=n_hidden, n_kernels=n_kernels, out_dim=100)
-    #     net = CNNTarget(n_kernels=n_kernels, out_dim=100)
     if all([d in ALLOWED_DATASETS for d in data_names]):
         hnet = CNNHyper(len(nodes), embed_dim, hidden_dim=hyper_hid,
                         n_hidden=n_hidden, n_kernels=n_kernels, out_dim=100)
