@@ -132,10 +132,10 @@ def train(data_names: List[str], data_path: str,
     test_best_max_based_on_step, test_best_std_based_on_step = -1, -1
     step_iter = trange(steps)
 
+    losses_dict = {}
     results = defaultdict(list)
     logging.info(f"Starting training with {len(nodes)} nodes")
     for step in step_iter:
-        print(f"Step: {step}")
         hnet.train()
 
         # select client at random
@@ -165,6 +165,10 @@ def train(data_names: List[str], data_path: str,
             img, label = tuple(t.to(device) for t in batch)
             pred = net(img.float())
             prvs_loss = criteria(pred, label)
+
+            if node_id not in losses_dict:
+                losses_dict[node_id] = []
+            losses_dict[node_id].append(prvs_loss.item())
 
             prvs_acc = np.mean([dice_loss_3d(pred[i], label[i]) for i in range(pred.shape[0])])
             net.train()
@@ -217,7 +221,6 @@ def train(data_names: List[str], data_path: str,
             step_results, avg_loss, avg_dice, all_dice = eval_model(nodes, hnet, net, criteria, device,
                                                                     split="test")
             logging.info(f"\nStep: {step + 1}, AVG Loss: {avg_loss:.4f},  AVG Dice: {avg_dice:.4f}")
-            print(f"\nStep: {step + 1}, AVG Loss: {avg_loss:.4f},  AVG Dice: {avg_dice:.4f}")
             results['test_avg_loss'].append(avg_loss)
             results['test_avg_dice'].append(avg_dice)
 
