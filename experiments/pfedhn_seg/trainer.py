@@ -17,9 +17,9 @@ from experiments.pfedhn_seg.node import BaseNodes
 from experiments.utils import get_device, set_logger, set_seed, str2bool
 
 ALLOWED_DATASETS = ['promise12', 'medical_segmentation_decathlon', 'nci_isbi_2013']
-logging.basicConfig(
-    filename=f'run_{str(datetime.datetime.now()).replace(" ", "-").replace(":", "-").replace(".", "-")}.log',
-    level=logging.INFO)
+# logging.basicConfig(
+#     filename=f'run_{str(datetime.datetime.now()).replace(" ", "-").replace(":", "-").replace(".", "-")}.log',
+#     level=logging.INFO)
 
 
 def dice_loss_3d(pred_3d, label_3d):
@@ -135,6 +135,7 @@ def train(data_names: List[str], data_path: str,
     results = defaultdict(list)
     logging.info(f"Starting training with {len(nodes)} nodes")
     for step in step_iter:
+        print(f"Step: {step}")
         hnet.train()
 
         # select client at random
