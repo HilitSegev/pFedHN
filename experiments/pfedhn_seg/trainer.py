@@ -309,8 +309,8 @@ if __name__ == '__main__':
     #       Model Prop args        #
     ################################
     parser.add_argument("--n-hidden", type=int, default=3, help="num. hidden layers")
-    parser.add_argument("--inner-lr", type=float, default=5e-3, help="learning rate for inner optimizer")
-    parser.add_argument("--lr", type=float, default=1e-2, help="learning rate")
+    parser.add_argument("--inner-lr", type=float, default=1e-2, help="learning rate for inner optimizer")
+    parser.add_argument("--lr", type=float, default=5e-2, help="learning rate")
     parser.add_argument("--wd", type=float, default=1e-3, help="weight decay")
     parser.add_argument("--inner-wd", type=float, default=5e-5, help="inner weight decay")
     parser.add_argument("--embed-dim", type=int, default=-1, help="embedding dim")
