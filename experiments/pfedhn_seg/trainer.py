@@ -138,7 +138,7 @@ def train(data_names: List[str], data_path: str,
 
         # produce & load local network weights
         weights = hnet(torch.tensor([node_id], dtype=torch.long).to(device))
-        logging.info(f"weights are assigned!")
+        logging.debug(f"weights are assigned!")
 
         # keep the BatchNorm params in the state_dict
         model_dict = net.state_dict()
@@ -165,7 +165,7 @@ def train(data_names: List[str], data_path: str,
             net.train()
 
         # inner updates -> obtaining theta_tilda
-        logging.info(f"starting with inner steps")
+        logging.debug(f"starting with inner steps")
         for i in range(inner_steps):
             net.train()
             inner_optim.zero_grad()
@@ -185,7 +185,7 @@ def train(data_names: List[str], data_path: str,
         optimizer.zero_grad()
 
         final_state = net.state_dict()
-        logging.info("done with inner steps")
+        logging.debug("done with inner steps")
         # calculating delta theta
         delta_theta = OrderedDict({k: inner_state[k] - final_state[k] for k in weights.keys()})
 
@@ -202,7 +202,7 @@ def train(data_names: List[str], data_path: str,
         # TODO: is this the way to reduce memory?
         torch.cuda.empty_cache()
         optimizer.step()
-        logging.info("done with hnet update")
+        logging.debug("done with hnet update")
         step_iter.set_description(
             f"Step: {step + 1}, Node ID: {node_id}, Loss: {prvs_loss:.4f},  Acc: {prvs_acc:.4f}"
         )
@@ -289,7 +289,7 @@ if __name__ == '__main__':
     parser.add_argument("--optim", type=str, default='sgd', choices=['adam', 'sgd'], help="learning rate")
     parser.add_argument("--batch-size", type=int, default=64)
     # TODO: change to 50
-    parser.add_argument("--inner-steps", type=int, default=2, help="number of inner steps")
+    parser.add_argument("--inner-steps", type=int, default=15, help="number of inner steps")
 
     ################################
     #       Model Prop args        #
