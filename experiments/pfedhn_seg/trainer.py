@@ -17,7 +17,9 @@ from experiments.pfedhn_seg.node import BaseNodes
 from experiments.utils import get_device, set_logger, set_seed, str2bool
 
 ALLOWED_DATASETS = ['promise12', 'medical_segmentation_decathlon', 'nci_isbi_2013']
-logging.basicConfig(filename=f'run_{str(datetime.datetime.now())}.log', level=logging.INFO)
+logging.basicConfig(
+    filename=f'run_{str(datetime.datetime.now()).replace(" ", "-").replace(":", "-").replace(".", "-")}.log',
+    level=logging.INFO)
 
 
 def dice_loss_3d(pred_3d, label_3d):
@@ -212,7 +214,7 @@ def train(data_names: List[str], data_path: str,
         if step % eval_every == 0:
             last_eval = step
             step_results, avg_loss, avg_dice, all_dice = eval_model(nodes, hnet, net, criteria, device,
-                                                                  split="test")
+                                                                    split="test")
             logging.info(f"\nStep: {step + 1}, AVG Loss: {avg_loss:.4f},  AVG Dice: {avg_dice:.4f}")
 
             results['test_avg_loss'].append(avg_loss)
@@ -239,7 +241,7 @@ def train(data_names: List[str], data_path: str,
     if step != last_eval:
         _, val_avg_loss, val_avg_dice, _ = eval_model(nodes, hnet, net, criteria, device, split="val")
         step_results, avg_loss, avg_dice, all_dice = eval_model(nodes, hnet, net, criteria, device,
-                                                              split="test")
+                                                                split="test")
         logging.info(f"\nStep: {step + 1}, AVG Loss: {avg_loss:.4f},  AVG Dice: {avg_dice:.4f}")
 
         results['test_avg_loss'].append(avg_loss)
@@ -291,7 +293,7 @@ if __name__ == '__main__':
     parser.add_argument("--optim", type=str, default='sgd', choices=['adam', 'sgd'], help="learning rate")
     parser.add_argument("--batch-size", type=int, default=64)
     # TODO: change to 50
-    parser.add_argument("--inner-steps", type=int, default=15, help="number of inner steps")
+    parser.add_argument("--inner-steps", type=int, default=25, help="number of inner steps")
 
     ################################
     #       Model Prop args        #

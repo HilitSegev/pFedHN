@@ -1,5 +1,6 @@
 import glob
 import random
+
 random.seed(1234)
 
 import nrrd
@@ -30,13 +31,15 @@ def random_crop(arr, shape, idx=None, crop=False):
                 print(f"shape = {shape}")
                 raise AssertionError
         if idx is None:
-            idx = [np.random.randint(0, arr.shape[i] - shape[i]) if arr.shape[i] > shape[i] else 0 for i in range(len(shape))]
+            idx = [np.random.randint(0, arr.shape[i] - shape[i]) if arr.shape[i] > shape[i] else 0 for i in
+                   range(len(shape))]
         return arr[[slice(idx[i], idx[i] + shape[i]) for i in range(len(shape))]], idx
     else:
         # resize image to "shape"
         dsfactor = [w / float(f) for w, f in zip(shape, arr.shape)]
         downed = np.round(nd.zoom(arr, zoom=dsfactor))
         return downed, idx
+
 
 class BaseDataset(Dataset):
     pass
@@ -93,6 +96,9 @@ class PROSTATEx(Dataset):
 
         # swap axes to match the shape of other Datasets
         # np_scans = np.swapaxes(np_scans, 0, 2)
+
+        # normalize np_scans to be 0-255
+        np_scans = 255 * (np_scans - np_scans.min()) / (np_scans.max() - np_scans.min())
 
         # read labels
         dicom_filepath = glob.glob(f'{self.labels_dir}/{patient_dir}/**/*.dcm', recursive=True)[0]
@@ -170,6 +176,9 @@ class NciIsbi2013(Dataset):
         # swap axes to match the shape of other Datasets
         # np_scans = np.swapaxes(np_scans, 0, 2)
 
+        # normalize np_scans to be 0-255
+        np_scans = 255 * (np_scans - np_scans.min()) / (np_scans.max() - np_scans.min())
+
         # read labels
         labels_path = [f for f in os.listdir(self.train_labels_dir) if f.startswith(patient_dir.split("/")[-1])][0]
         np_labels, header = nrrd.read(f"{self.train_labels_dir}/{labels_path}")
@@ -199,7 +208,7 @@ class MedicalSegmentationDecathlon(Dataset):
             transform (callable, optional): Optional transform to be applied on a sample.
         """
         # TODO: Save the data in this format also in cortex
-        self.root_dir = root_dir + "/MedicalSegmentationDecathlon/Task05_Prostate"
+        self.root_dir = root_dir + "/MedicalSegmentationDecathlon"  # /Task05_Prostate"
 
         self.train_imgs_dir = self.root_dir + "/imagesTr"
         self.train_labels_dir = self.root_dir + "/labelsTr"
@@ -232,6 +241,9 @@ class MedicalSegmentationDecathlon(Dataset):
 
         # swap axes to match the shape of other Datasets
         np_scans = np.swapaxes(np_scans, 0, 2)
+
+        # normalize np_scans to be 0-255
+        np_scans = 255 * (np_scans - np_scans.min()) / (np_scans.max() - np_scans.min())
 
         # read labels
         orig_labels = nib.load(f"{self.curr_imgs_dir}/{nii_file_name}".replace("imagesTr", "labelsTr"))
@@ -290,6 +302,9 @@ class Promise12(Dataset):
 
         scans = sitk.GetArrayFromImage(sitk.ReadImage(f"{self.curr_dir}/Case{case_idx}.mhd", sitk.sitkFloat32))
 
+        # normalize np_scans to be 0-255
+        scans = 255 * (scans - scans.min()) / (scans.max() - scans.min())
+
         label_segmentations = sitk.GetArrayFromImage(
             sitk.ReadImage(f"{self.curr_dir}/Case{case_idx}_segmentation.mhd",
                            sitk.sitkFloat32))
@@ -325,7 +340,6 @@ def test_plot_dataset(data_obj):
     print(train_seg.shape)
     print(test_scans.shape)
     print(test_seg.shape)
-
 
     plt.figure(figsize=(20, 16))
     plt.gray()
