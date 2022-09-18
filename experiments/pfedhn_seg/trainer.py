@@ -303,7 +303,7 @@ if __name__ == '__main__':
     parser.add_argument("--optim", type=str, default='sgd', choices=['adam', 'sgd'], help="learning rate")
     parser.add_argument("--batch-size", type=int, default=64)
     # TODO: change to 50
-    parser.add_argument("--inner-steps", type=int, default=25, help="number of inner steps")
+    parser.add_argument("--inner-steps", type=int, default=3, help="number of inner steps")
 
     ################################
     #       Model Prop args        #

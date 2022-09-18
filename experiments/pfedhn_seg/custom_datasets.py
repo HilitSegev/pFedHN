@@ -83,6 +83,7 @@ class PROSTATEx(Dataset):
         return len(self.idx_to_case_map)
 
     def __getitem__(self, idx):
+        idx = 0
         patient_dir = self.idx_to_case_map[idx]
 
         dcm_files_list = glob.glob(f'{self.imgs_dir}/{patient_dir}/**/*.dcm', recursive=True)
@@ -163,6 +164,7 @@ class NciIsbi2013(Dataset):
         return len(self.idx_to_case_map)
 
     def __getitem__(self, idx):
+        idx = 0
         patient_dir = self.idx_to_case_map[idx]
 
         dcm_files_list = glob.glob(f'{self.curr_imgs_dir}/{patient_dir}/**/*.dcm', recursive=True)
@@ -208,7 +210,7 @@ class MedicalSegmentationDecathlon(Dataset):
             transform (callable, optional): Optional transform to be applied on a sample.
         """
         # TODO: Save the data in this format also in cortex
-        self.root_dir = root_dir + "/MedicalSegmentationDecathlon/Task05_Prostate"
+        self.root_dir = root_dir + "/MedicalSegmentationDecathlon" #/Task05_Prostate"
 
         self.train_imgs_dir = self.root_dir + "/imagesTr"
         self.train_labels_dir = self.root_dir + "/labelsTr"
@@ -231,6 +233,7 @@ class MedicalSegmentationDecathlon(Dataset):
         return len(self.idx_to_case_map)
 
     def __getitem__(self, idx):
+        idx = 0
         nii_file_name = self.idx_to_case_map[idx]
 
         # read scan
@@ -295,6 +298,7 @@ class Promise12(Dataset):
         return len(self.idx_to_case_map)
 
     def __getitem__(self, idx):
+        idx = 0
         case_idx = self.idx_to_case_map[idx]
 
         if not os.path.exists(f"{self.curr_dir}/Case{case_idx}.mhd"):
