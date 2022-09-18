@@ -210,7 +210,7 @@ class MedicalSegmentationDecathlon(Dataset):
             transform (callable, optional): Optional transform to be applied on a sample.
         """
         # TODO: Save the data in this format also in cortex
-        self.root_dir = root_dir + "/MedicalSegmentationDecathlon" #/Task05_Prostate"
+        self.root_dir = root_dir + "/MedicalSegmentationDecathlon/Task05_Prostate"
 
         self.train_imgs_dir = self.root_dir + "/imagesTr"
         self.train_labels_dir = self.root_dir + "/labelsTr"
