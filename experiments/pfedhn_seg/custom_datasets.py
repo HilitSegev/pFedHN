@@ -88,9 +88,11 @@ class PROSTATEx(Dataset):
         return len(self.idx_to_case_map)
 
     def __getitem__(self, idx):
-
         if os.path.exists(self.processed_files[idx] + '_image.npy'):
-            return np.load(self.processed_files[idx] + '_image.npy'), np.load(self.processed_files[idx] + '_label.npy')
+            image, label = np.load(self.processed_files[idx] + '_image.npy'), \
+                           np.load(self.processed_files[idx] + '_label.npy')
+            image = (image - image.min()) / (image.max() - image.min())
+            return image, label
 
         patient_dir = self.idx_to_case_map[idx]
 
@@ -169,16 +171,19 @@ class NciIsbi2013(Dataset):
         self.idx_to_case_map = dict(enumerate(self.file_names))
 
         self.processed_files = {
-            key: f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_{key}" for key in self.idx_to_case_map
+            key: f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_{key}" for key in
+            self.idx_to_case_map
         }
 
     def __len__(self):
         return len(self.idx_to_case_map)
 
     def __getitem__(self, idx):
-
-        if os.path.exists(self.processed_files[idx]  + '_image.npy'):
-            return np.load(self.processed_files[idx] + '_image.npy'), np.load(self.processed_files[idx] + '_label.npy')
+        if os.path.exists(self.processed_files[idx] + '_image.npy'):
+            image, label = np.load(self.processed_files[idx] + '_image.npy'), \
+                           np.load(self.processed_files[idx] + '_label.npy')
+            image = (image - image.min()) / (image.max() - image.min())
+            return image, label
 
         patient_dir = self.idx_to_case_map[idx]
 
@@ -253,9 +258,11 @@ class MedicalSegmentationDecathlon(Dataset):
         return len(self.idx_to_case_map)
 
     def __getitem__(self, idx):
-
         if os.path.exists(self.processed_files[idx] + '_image.npy'):
-            return np.load(self.processed_files[idx] + '_image.npy'), np.load(self.processed_files[idx] + '_label.npy')
+            image, label = np.load(self.processed_files[idx] + '_image.npy'), \
+                           np.load(self.processed_files[idx] + '_label.npy')
+            image = (image - image.min()) / (image.max() - image.min())
+            return image, label
 
         nii_file_name = self.idx_to_case_map[idx]
 
@@ -326,8 +333,11 @@ class Promise12(Dataset):
         return len(self.idx_to_case_map)
 
     def __getitem__(self, idx):
-        if os.path.exists(self.processed_files[idx]  + '_image.npy'):
-            return np.load(self.processed_files[idx] + '_image.npy'), np.load(self.processed_files[idx] + '_label.npy')
+        if os.path.exists(self.processed_files[idx] + '_image.npy'):
+            image, label = np.load(self.processed_files[idx] + '_image.npy'), \
+                           np.load(self.processed_files[idx] + '_label.npy')
+            image = (image - image.min()) / (image.max() - image.min())
+            return image, label
 
         case_idx = self.idx_to_case_map[idx]
 

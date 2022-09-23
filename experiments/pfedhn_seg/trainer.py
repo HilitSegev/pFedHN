@@ -167,6 +167,7 @@ def train(data_names: List[str], data_path: str,
         # NOTE: evaluation on sent model
         with torch.no_grad():
             net.eval()
+            # TODO: change back to val loader
             batch = next(iter(nodes.val_loaders[node_id]))
             img, label = tuple(t.to(device) for t in batch)
             pred = net(img.float())
@@ -204,6 +205,13 @@ def train(data_names: List[str], data_path: str,
 
             loss = criteria(pred, label)
             loss.backward()
+
+            if i % 10 == 0:
+                wandb.log(
+                    {f"inner_step_train_loss_{node_id}": float(loss)},
+                    step=inner_steps*len(losses_dict[node_id]) + i
+                )
+
             torch.nn.utils.clip_grad_norm_(net.parameters(), 50)
 
             inner_optim.step()
@@ -327,13 +335,13 @@ if __name__ == '__main__':
     parser.add_argument("--optim", type=str, default='sgd', choices=['adam', 'sgd'], help="learning rate")
     parser.add_argument("--batch-size", type=int, default=32)
     # TODO: change to 50
-    parser.add_argument("--inner-steps", type=int, default=3, help="number of inner steps")
+    parser.add_argument("--inner-steps", type=int, default=100, help="number of inner steps")
 
     ################################
     #       Model Prop args        #
     ################################
-    parser.add_argument("--n-hidden", type=int, default=3, help="num. hidden layers")
-    parser.add_argument("--inner-lr", type=float, default=1e-2, help="learning rate for inner optimizer")
+    parser.add_argument("--n-hidden", type=int, default=20, help="num. hidden layers")
+    parser.add_argument("--inner-lr", type=float, default=5e-3, help="learning rate for inner optimizer")
     parser.add_argument("--lr", type=float, default=5e-2, help="learning rate")
     parser.add_argument("--wd", type=float, default=1e-3, help="weight decay")
     parser.add_argument("--inner-wd", type=float, default=5e-5, help="inner weight decay")

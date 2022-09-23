@@ -19,7 +19,6 @@ def get_datasets(data_name, dataroot, normalize=True, val_size=10000):
     :return: train_set, val_set, test_set (tuple of pytorch dataset/subset)
     """
 
-    # TODO: Handle the new datasets
     if data_name == 'cifar10':
         normalization = transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
         data_obj = CIFAR10
@@ -29,21 +28,22 @@ def get_datasets(data_name, dataroot, normalize=True, val_size=10000):
     elif data_name == 'promise12':
         normalization = transforms.Normalize((0, 0, 0), (1, 1, 1))
         data_obj = Promise12
-        val_size = 1
+        val_size = 5
     elif data_name == 'medical_segmentation_decathlon':
         normalization = transforms.Normalize((0, 0, 0), (1, 1, 1))
         data_obj = MedicalSegmentationDecathlon
-        val_size = 1
+        val_size = 3
     elif data_name == 'nci_isbi_2013':
         normalization = transforms.Normalize((0, 0, 0), (1, 1, 1))
         data_obj = NciIsbi2013
-        val_size = 1
+        val_size = 6
     elif data_name == 'prostatex':
         normalization = transforms.Normalize((0, 0, 0), (1, 1, 1))
         data_obj = PROSTATEx
-        val_size = 1
+        val_size = 9
     else:
         raise ValueError("choose data_name from ['promise12', 'cifar10', 'cifar100']")
+
 
     trans = [transforms.ToTensor()]
 

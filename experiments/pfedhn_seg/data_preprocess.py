@@ -4,7 +4,7 @@ from custom_datasets import Promise12, MedicalSegmentationDecathlon, NciIsbi2013
 
 
 if __name__ == '__main__':
-    root_dir = '/cortex/data'
+    root_dir = 'data'
     for dataset in [Promise12, MedicalSegmentationDecathlon, NciIsbi2013, PROSTATEx]:
         for train in [True, False]:
             dataset_obj = dataset(
