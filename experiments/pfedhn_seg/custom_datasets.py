@@ -79,11 +79,19 @@ class PROSTATEx(Dataset):
 
         self.idx_to_case_map = dict(enumerate(self.file_names))
 
+        self.processed_files = {
+            key: f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_{key}" for key in
+            self.idx_to_case_map
+        }
+
     def __len__(self):
         return len(self.idx_to_case_map)
 
     def __getitem__(self, idx):
-        idx = 0
+
+        if os.path.exists(self.processed_files[idx] + '_image.npy'):
+            return np.load(self.processed_files[idx] + '_image.npy'), np.load(self.processed_files[idx] + '_label.npy')
+
         patient_dir = self.idx_to_case_map[idx]
 
         dcm_files_list = glob.glob(f'{self.imgs_dir}/{patient_dir}/**/*.dcm', recursive=True)
@@ -160,11 +168,18 @@ class NciIsbi2013(Dataset):
 
         self.idx_to_case_map = dict(enumerate(self.file_names))
 
+        self.processed_files = {
+            key: f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_{key}" for key in self.idx_to_case_map
+        }
+
     def __len__(self):
         return len(self.idx_to_case_map)
 
     def __getitem__(self, idx):
-        idx = 0
+
+        if os.path.exists(self.processed_files[idx]  + '_image.npy'):
+            return np.load(self.processed_files[idx] + '_image.npy'), np.load(self.processed_files[idx] + '_label.npy')
+
         patient_dir = self.idx_to_case_map[idx]
 
         dcm_files_list = glob.glob(f'{self.curr_imgs_dir}/{patient_dir}/**/*.dcm', recursive=True)
@@ -229,11 +244,19 @@ class MedicalSegmentationDecathlon(Dataset):
 
         self.idx_to_case_map = dict(enumerate(self.file_names))
 
+        self.processed_files = {
+            key: f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_{key}" for key in
+            self.idx_to_case_map
+        }
+
     def __len__(self):
         return len(self.idx_to_case_map)
 
     def __getitem__(self, idx):
-        idx = 0
+
+        if os.path.exists(self.processed_files[idx] + '_image.npy'):
+            return np.load(self.processed_files[idx] + '_image.npy'), np.load(self.processed_files[idx] + '_label.npy')
+
         nii_file_name = self.idx_to_case_map[idx]
 
         # read scan
@@ -294,11 +317,18 @@ class Promise12(Dataset):
 
         self.idx_to_case_map = dict(enumerate(self.nums_in_filenames))
 
+        self.processed_files = {
+            key: f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_{key}" for key in
+            self.idx_to_case_map
+        }
+
     def __len__(self):
         return len(self.idx_to_case_map)
 
     def __getitem__(self, idx):
-        idx = 0
+        if os.path.exists(self.processed_files[idx]  + '_image.npy'):
+            return np.load(self.processed_files[idx] + '_image.npy'), np.load(self.processed_files[idx] + '_label.npy')
+
         case_idx = self.idx_to_case_map[idx]
 
         if not os.path.exists(f"{self.curr_dir}/Case{case_idx}.mhd"):
