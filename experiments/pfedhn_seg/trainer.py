@@ -326,6 +326,7 @@ if __name__ == '__main__':
     parser.add_argument("--num-steps", type=int, default=5000)
     parser.add_argument("--optim", type=str, default='sgd', choices=['adam', 'sgd'], help="learning rate")
     parser.add_argument("--batch-size", type=int, default=32)
+    # TODO: change to 50
     parser.add_argument("--inner-steps", type=int, default=3, help="number of inner steps")
 
     ################################
