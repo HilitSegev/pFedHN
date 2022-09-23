@@ -4,7 +4,6 @@ import random
 random.seed(1234)
 
 import nrrd
-import cv2
 import pydicom
 from scipy import ndimage as nd
 from torch.utils.data.dataset import Dataset
