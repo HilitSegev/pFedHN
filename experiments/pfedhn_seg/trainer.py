@@ -6,6 +6,7 @@ import random
 from collections import OrderedDict, defaultdict
 from pathlib import Path
 from typing import List
+import wandb
 
 import numpy as np
 import torch
@@ -166,7 +167,7 @@ def train(data_names: List[str], data_path: str,
         # NOTE: evaluation on sent model
         with torch.no_grad():
             net.eval()
-            batch = next(iter(nodes.test_loaders[node_id]))
+            batch = next(iter(nodes.val_loaders[node_id]))
             img, label = tuple(t.to(device) for t in batch)
             pred = net(img.float())
             prvs_loss = criteria(pred, label)
@@ -175,7 +176,18 @@ def train(data_names: List[str], data_path: str,
                 losses_dict[node_id] = []
             losses_dict[node_id].append(prvs_loss.item())
 
+            # log loss to wandb
+            wandb.log(
+                {f"target_val_loss_{node_id}": float(prvs_loss)},
+                step=len(losses_dict[node_id])
+            )
+
             prvs_acc = np.mean([dice_loss_3d(pred[i], label[i]) for i in range(pred.shape[0])])
+            wandb.log(
+                {f"target_val_avg_dice_{node_id}": float(prvs_acc)},
+                step=len(losses_dict[node_id])
+            )
+
             net.train()
 
         # inner updates -> obtaining theta_tilda
@@ -195,6 +207,11 @@ def train(data_names: List[str], data_path: str,
             torch.nn.utils.clip_grad_norm_(net.parameters(), 50)
 
             inner_optim.step()
+        # log loss to wandb
+        wandb.log(
+            {f"target_train_loss_{node_id}": float(loss)},
+            step=len(losses_dict[node_id])
+        )
 
         optimizer.zero_grad()
 
@@ -213,14 +230,14 @@ def train(data_names: List[str], data_path: str,
             p.grad = g
 
         torch.nn.utils.clip_grad_norm_(hnet.parameters(), 50)
-        # TODO: is this the way to reduce memory?
-        torch.cuda.empty_cache()
+
         optimizer.step()
         logging.debug("done with hnet update")
         step_iter.set_description(
             f"Step: {step + 1}, Node ID: {node_id}, Loss: {prvs_loss:.4f},  Acc: {prvs_acc:.4f}"
         )
 
+        # Eval using test set
         if step % eval_every == 0:
             last_eval = step
             step_results, avg_loss, avg_dice, all_dice = eval_model(nodes, hnet, net, criteria, device,
@@ -273,6 +290,13 @@ def train(data_names: List[str], data_path: str,
         results['test_best_max_based_on_step'].append(test_best_max_based_on_step)
         results['test_best_std_based_on_step'].append(test_best_std_based_on_step)
 
+    # save models to wandb
+    torch.onnx.export(hnet, torch.tensor([node_id], dtype=torch.long),"hyper_net.onnx")
+    wandb.save("hyper_net.onnx")
+
+    torch.onnx.export(net, img.float(), "target_net.onnx")
+    wandb.save("target_net.onnx")
+
     save_path = Path(save_path)
     save_path.mkdir(parents=True, exist_ok=True)
     with open(str(save_path / f"results_{inner_steps}_inner_steps_seed_{seed}.json"), "w") as file:
@@ -301,8 +325,7 @@ if __name__ == '__main__':
 
     parser.add_argument("--num-steps", type=int, default=5000)
     parser.add_argument("--optim", type=str, default='sgd', choices=['adam', 'sgd'], help="learning rate")
-    parser.add_argument("--batch-size", type=int, default=64)
-    # TODO: change to 50
+    parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--inner-steps", type=int, default=3, help="number of inner steps")
 
     ################################
@@ -323,7 +346,7 @@ if __name__ == '__main__':
     #       General args        #
     #############################
     parser.add_argument("--gpu", type=int, default=0, help="gpu device ID")
-    parser.add_argument("--eval-every", type=int, default=30, help="eval every X selected epochs")
+    parser.add_argument("--eval-every", type=int, default=50, help="eval every X selected epochs")
     parser.add_argument("--save-path", type=str, default="pfedhn_hetro_res", help="dir path for output file")
     parser.add_argument("--seed", type=int, default=42, help="seed value")
 
@@ -335,24 +358,30 @@ if __name__ == '__main__':
 
     device = get_device(gpus=args.gpu)
 
-    train(
-        data_names=args.data_names,
-        data_path=args.data_path,
-        steps=args.num_steps,
-        inner_steps=args.inner_steps,
-        optim=args.optim,
-        lr=args.lr,
-        inner_lr=args.inner_lr,
-        embed_lr=args.embed_lr,
-        wd=args.wd,
-        inner_wd=args.inner_wd,
-        embed_dim=args.embed_dim,
-        hyper_hid=args.hyper_hid,
-        n_hidden=args.n_hidden,
-        n_kernels=args.nkernels,
-        bs=args.batch_size,
-        device=device,
-        eval_every=args.eval_every,
-        save_path=args.save_path,
-        seed=args.seed
+    wandb.login()
+    with wandb.init(project='pFedHN-MedicalSegmentation',
+                    entity='pfedhnmed',
+                    name='UNET-3D-FULL',
+                    config=args):
+        config = wandb.config
+        train(
+            data_names=args.data_names,
+            data_path=args.data_path,
+            steps=args.num_steps,
+            inner_steps=args.inner_steps,
+            optim=args.optim,
+            lr=args.lr,
+            inner_lr=args.inner_lr,
+            embed_lr=args.embed_lr,
+            wd=args.wd,
+            inner_wd=args.inner_wd,
+            embed_dim=args.embed_dim,
+            hyper_hid=args.hyper_hid,
+            n_hidden=args.n_hidden,
+            n_kernels=args.nkernels,
+            bs=args.batch_size,
+            device=device,
+            eval_every=args.eval_every,
+            save_path=args.save_path,
+            seed=args.seed
     )

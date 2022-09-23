@@ -29,19 +29,19 @@ def get_datasets(data_name, dataroot, normalize=True, val_size=10000):
     elif data_name == 'promise12':
         normalization = transforms.Normalize((0, 0, 0), (1, 1, 1))
         data_obj = Promise12
-        val_size = 5
+        val_size = 1
     elif data_name == 'medical_segmentation_decathlon':
         normalization = transforms.Normalize((0, 0, 0), (1, 1, 1))
         data_obj = MedicalSegmentationDecathlon
-        val_size = 3
+        val_size = 1
     elif data_name == 'nci_isbi_2013':
         normalization = transforms.Normalize((0, 0, 0), (1, 1, 1))
         data_obj = NciIsbi2013
-        val_size = 6
+        val_size = 1
     elif data_name == 'prostatex':
         normalization = transforms.Normalize((0, 0, 0), (1, 1, 1))
         data_obj = PROSTATEx
-        val_size = 9
+        val_size = 1
     else:
         raise ValueError("choose data_name from ['promise12', 'cifar10', 'cifar100']")
 
