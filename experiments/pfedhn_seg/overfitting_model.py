@@ -110,23 +110,23 @@ test_loader = torch.utils.data.DataLoader(
 # ## Explore the Data
 
 # In[9]:
-
-
-scan_id = 1
-slice_id = 8
-fig, ax = plt.subplots(1, 2, figsize=(10, 10))
-ax[0].imshow(dataset[scan_id][0][slice_id, :, :], cmap='gray')
-ax[1].imshow(dataset[scan_id][1][slice_id, :, :], cmap='gray')
-
-
-# In[10]:
-
-
-scan_id = 1
-slice_id = 14
-fig, ax = plt.subplots(1, 2, figsize=(10, 10))
-ax[0].imshow(dataset[scan_id][0][slice_id, :, :], cmap='gray')
-ax[1].imshow(dataset[scan_id][1][slice_id, :, :], cmap='gray')
+#
+#
+# scan_id = 1
+# slice_id = 8
+# fig, ax = plt.subplots(1, 2, figsize=(10, 10))
+# ax[0].imshow(dataset[scan_id][0][slice_id, :, :], cmap='gray')
+# ax[1].imshow(dataset[scan_id][1][slice_id, :, :], cmap='gray')
+#
+#
+# # In[10]:
+#
+#
+# scan_id = 1
+# slice_id = 14
+# fig, ax = plt.subplots(1, 2, figsize=(10, 10))
+# ax[0].imshow(dataset[scan_id][0][slice_id, :, :], cmap='gray')
+# ax[1].imshow(dataset[scan_id][1][slice_id, :, :], cmap='gray')
 
 
 # # Define the Model

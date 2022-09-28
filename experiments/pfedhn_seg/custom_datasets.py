@@ -346,7 +346,7 @@ class Promise12(Dataset):
         scans = sitk.GetArrayFromImage(sitk.ReadImage(f"{self.curr_dir}/Case{case_idx}.mhd", sitk.sitkFloat32))
 
         # normalize np_scans to be 0-255
-        scans = 255 * (scans - scans.min()) / (scans.max() - scans.min())
+        # scans = 255 * (scans - scans.min()) / (scans.max() - scans.min())
 
         label_segmentations = sitk.GetArrayFromImage(
             sitk.ReadImage(f"{self.curr_dir}/Case{case_idx}_segmentation.mhd",
