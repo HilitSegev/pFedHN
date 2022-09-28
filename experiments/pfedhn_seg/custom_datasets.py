@@ -332,6 +332,7 @@ class Promise12(Dataset):
         return len(self.idx_to_case_map)
 
     def __getitem__(self, idx):
+        print(self.processed_files[idx] + '_image.npy')
         if os.path.exists(self.processed_files[idx] + '_image.npy'):
             image, label = np.load(self.processed_files[idx] + '_image.npy'), \
                            np.load(self.processed_files[idx] + '_label.npy')
