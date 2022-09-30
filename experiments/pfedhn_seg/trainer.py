@@ -13,6 +13,7 @@ import torch
 import torch.utils.data
 from tqdm import trange
 
+from experiments.pfedhn_seg.custom_losses import DiceBCELoss
 from experiments.pfedhn_seg.models import CNNHyper, CNNTarget
 from experiments.pfedhn_seg.node import BaseNodes
 from experiments.utils import get_device, set_logger, set_seed, str2bool
@@ -125,8 +126,9 @@ def train(data_names: List[str], data_path: str,
         'adam': torch.optim.Adam(params=hnet.parameters(), lr=lr)
     }
     optimizer = optimizers[optim]
-    # TODO: is this the loss to use?
-    criteria = torch.nn.BCEWithLogitsLoss()
+    # use mix of Dice and BCE loss
+
+    criteria = DiceBCELoss()
 
     ################
     # init metrics #
@@ -335,7 +337,7 @@ if __name__ == '__main__':
     parser.add_argument("--optim", type=str, default='sgd', choices=['adam', 'sgd'], help="learning rate")
     parser.add_argument("--batch-size", type=int, default=32)
     # TODO: change to 50
-    parser.add_argument("--inner-steps", type=int, default=100, help="number of inner steps")
+    parser.add_argument("--inner-steps", type=int, default=50, help="number of inner steps")
 
     ################################
     #       Model Prop args        #
