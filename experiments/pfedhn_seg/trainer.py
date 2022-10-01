@@ -27,7 +27,7 @@ ALLOWED_DATASETS = ['promise12', 'medical_segmentation_decathlon', 'nci_isbi_201
 
 logging.basicConfig(
     # filename=f'run_{str(datetime.datetime.now()).replace(" ", "-").replace(":", "-").replace(".", "-")}.log',
-    level=logging.DEBUG)
+    level=logging.INFO)
 
 def dice_loss_3d(pred_3d, label_3d):
     return 2 * (((pred_3d > 0.5) * (label_3d > 0.5)).sum().item() + 1) / (

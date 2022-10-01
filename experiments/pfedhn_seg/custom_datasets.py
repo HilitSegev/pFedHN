@@ -41,10 +41,11 @@ def random_crop(arr, shape, idx=None, crop=False):
 
 
 class BaseDataset(Dataset):
-    pass
+    def __len__(self):
+        return len(self.processed_files)
 
 
-class PROSTATEx(Dataset):
+class PROSTATEx(BaseDataset):
     """PROSTATEx Dataset"""
 
     def __init__(self, root_dir, train=True, transform=None, **kwargs):
@@ -61,30 +62,30 @@ class PROSTATEx(Dataset):
             train (bool): Whether to take the training dataset or the test dataset
             transform (callable, optional): Optional transform to be applied on a sample.
         """
-        # TODO: Save the data in this format also in cortex
-        self.root_dir = root_dir + "/PROSTATEx"
-
-        self.imgs_dir = self.root_dir + "/Samples" + "/PROSTATEx"
-        self.labels_dir = self.root_dir + "/Labels" + "/PROSTATEx"
-
+        # check if processed files exist
         self.train = train
         self.transform = transform
+        if os.path.exists(f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_0_image.npy"):
+            processed_files_list = glob.glob(f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_*_image.npy")
+            self.processed_files = {key: f[:-10] for key, f in enumerate(processed_files_list)}
+        else:
+            self.root_dir = root_dir + "/PROSTATEx"
 
-        file_names = [f for f in os.listdir(f"{self.imgs_dir}") if f.startswith("Prostate")]
+            self.imgs_dir = self.root_dir + "/Samples" + "/PROSTATEx"
+            self.labels_dir = self.root_dir + "/Labels" + "/PROSTATEx"
 
-        test_files = random.sample(file_names, int(len(file_names) * 0.2))
-        train_files = [f for f in file_names if f not in test_files]
-        self.file_names = train_files if self.train else test_files
+            file_names = [f for f in os.listdir(f"{self.imgs_dir}") if f.startswith("Prostate")]
 
-        self.idx_to_case_map = dict(enumerate(self.file_names))
+            test_files = random.sample(file_names, int(len(file_names) * 0.2))
+            train_files = [f for f in file_names if f not in test_files]
+            self.file_names = train_files if self.train else test_files
 
-        self.processed_files = {
-            key: f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_{key}" for key in
-            self.idx_to_case_map
-        }
+            self.idx_to_case_map = dict(enumerate(self.file_names))
 
-    def __len__(self):
-        return len(self.idx_to_case_map)
+            self.processed_files = {
+                key: f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_{key}" for key in
+                self.idx_to_case_map
+            }
 
     def __getitem__(self, idx):
         if os.path.exists(self.processed_files[idx] + '_image.npy'):
@@ -123,7 +124,7 @@ class PROSTATEx(Dataset):
         return random_crop(np_scans, MRI_SCAN_SHAPE, idx)[0], np_labels
 
 
-class NciIsbi2013(Dataset):
+class NciIsbi2013(BaseDataset):
     """NCI-ISBI-2013 Dataset"""
 
     def __init__(self, root_dir, train=True, transform=None, **kwargs):
@@ -141,41 +142,45 @@ class NciIsbi2013(Dataset):
             train (bool): Whether to take the training dataset or the test dataset
             transform (callable, optional): Optional transform to be applied on a sample.
         """
-        # TODO: Save the data in this format also in cortex
-        self.root_dir = root_dir + "/NCI-ISBI-2013"
-
-        self.train_imgs_dir = self.root_dir + "/ISBI-Prostate-Challenge-Training"
-        self.train_labels_dir = self.root_dir + "/Labels/Training"
-        self.test_imgs_dir = self.root_dir + "/ISBI-Prostate-Challenge-Testing"
-        self.test_labels_dir = self.root_dir + "/Labels/Test"
-
+        # check if processed files exist
         self.train = train
         self.transform = transform
+        if os.path.exists(
+                f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_0_image.npy"):
+            processed_files_list = glob.glob(
+                f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_*_image.npy")
+            self.processed_files = {key: f[:-10] for key, f in enumerate(processed_files_list)}
+        else:
+            self.root_dir = root_dir + "/NCI-ISBI-2013"
 
-        self.curr_imgs_dir = self.train_imgs_dir
+            self.train_imgs_dir = self.root_dir + "/ISBI-Prostate-Challenge-Training"
+            self.train_labels_dir = self.root_dir + "/Labels/Training"
+            self.test_imgs_dir = self.root_dir + "/ISBI-Prostate-Challenge-Testing"
+            self.test_labels_dir = self.root_dir + "/Labels/Test"
 
-        subdir_to_prefix = {
-            'Prostate-3T': 'Prostate3T',
-            'PROSTATE-DIAGNOSIS': 'ProstateDx'
-        }
 
-        file_names = sum([[f"{subdir}/{f}" for f in
-                           os.listdir(f"{self.curr_imgs_dir}/{subdir}") if f.startswith(subdir_to_prefix[subdir])] for
-                          subdir in subdir_to_prefix], [])
+            self.curr_imgs_dir = self.train_imgs_dir
 
-        test_files = random.sample(file_names, int(len(file_names) * 0.2))
-        train_files = [f for f in file_names if f not in test_files]
-        self.file_names = train_files if self.train else test_files
+            subdir_to_prefix = {
+                'Prostate-3T': 'Prostate3T',
+                'PROSTATE-DIAGNOSIS': 'ProstateDx'
+            }
 
-        self.idx_to_case_map = dict(enumerate(self.file_names))
+            file_names = sum([[f"{subdir}/{f}" for f in
+                               os.listdir(f"{self.curr_imgs_dir}/{subdir}") if f.startswith(subdir_to_prefix[subdir])] for
+                              subdir in subdir_to_prefix], [])
 
-        self.processed_files = {
+            test_files = random.sample(file_names, int(len(file_names) * 0.2))
+            train_files = [f for f in file_names if f not in test_files]
+            self.file_names = train_files if self.train else test_files
+
+            self.idx_to_case_map = dict(enumerate(self.file_names))
+
+            self.processed_files = {
             key: f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_{key}" for key in
             self.idx_to_case_map
         }
 
-    def __len__(self):
-        return len(self.idx_to_case_map)
 
     def __getitem__(self, idx):
         if os.path.exists(self.processed_files[idx] + '_image.npy'):
@@ -213,7 +218,7 @@ class NciIsbi2013(Dataset):
         return random_crop(np_scans, MRI_SCAN_SHAPE, idx)[0], np_labels
 
 
-class MedicalSegmentationDecathlon(Dataset):
+class MedicalSegmentationDecathlon(BaseDataset):
     """MedicalSegmentationDecathlon Dataset"""
 
     def __init__(self, root_dir, train=True, transform=None, **kwargs):
@@ -228,33 +233,38 @@ class MedicalSegmentationDecathlon(Dataset):
             train (bool): Whether to take the training dataset or the test dataset
             transform (callable, optional): Optional transform to be applied on a sample.
         """
-        # TODO: Save the data in this format also in cortex
-        self.root_dir = root_dir + "/MedicalSegmentationDecathlon/Task05_Prostate"
-
-        self.train_imgs_dir = self.root_dir + "/imagesTr"
-        self.train_labels_dir = self.root_dir + "/labelsTr"
-        self.test_imgs_dir = self.root_dir + "/imagesTs"
-
+        # check if processed files exist
         self.train = train
         self.transform = transform
+        if os.path.exists(
+                f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_0_image.npy"):
+            processed_files_list = glob.glob(
+                f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_*_image.npy")
+            self.processed_files = {key: f[:-10] for key, f in enumerate(processed_files_list)}
 
-        self.curr_imgs_dir = self.train_imgs_dir
+        else:
+            self.root_dir = root_dir + "/MedicalSegmentationDecathlon/Task05_Prostate"
 
-        file_names = [f for f in os.listdir(self.curr_imgs_dir) if f.endswith(".nii")]
+            self.train_imgs_dir = self.root_dir + "/imagesTr"
+            self.train_labels_dir = self.root_dir + "/labelsTr"
+            self.test_imgs_dir = self.root_dir + "/imagesTs"
 
-        test_files = random.sample(file_names, int(len(file_names) * 0.2))
-        train_files = [f for f in file_names if f not in test_files]
-        self.file_names = train_files if self.train else test_files
 
-        self.idx_to_case_map = dict(enumerate(self.file_names))
+            self.curr_imgs_dir = self.train_imgs_dir
 
-        self.processed_files = {
+            file_names = [f for f in os.listdir(self.curr_imgs_dir) if f.endswith(".nii")]
+
+            test_files = random.sample(file_names, int(len(file_names) * 0.2))
+            train_files = [f for f in file_names if f not in test_files]
+            self.file_names = train_files if self.train else test_files
+
+            self.idx_to_case_map = dict(enumerate(self.file_names))
+
+            self.processed_files = {
             key: f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_{key}" for key in
             self.idx_to_case_map
         }
 
-    def __len__(self):
-        return len(self.idx_to_case_map)
 
     def __getitem__(self, idx):
         if os.path.exists(self.processed_files[idx] + '_image.npy'):
@@ -290,7 +300,7 @@ class MedicalSegmentationDecathlon(Dataset):
         return random_crop(np_scans, MRI_SCAN_SHAPE, idx)[0], np_labels
 
 
-class Promise12(Dataset):
+class Promise12(BaseDataset):
     """Promise12 Medical Dataset"""
 
     def __init__(self, root_dir, train=True, transform=None, **kwargs):
@@ -304,32 +314,38 @@ class Promise12(Dataset):
             train (bool): Whether to take the training dataset or the test dataset
             transform (callable, optional): Optional transform to be applied on a sample.
         """
-        # TODO: Save the data in this format also in cortex
-        self.root_dir = root_dir + "/Promise12"
-        self.train_dir = self.root_dir + "/Train"
-        self.test_dir = self.root_dir + "/Test"
-
+        # check if processed files exist
         self.train = train
         self.transform = transform
+        if os.path.exists(
+                f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_0_image.npy"):
+            processed_files_list = glob.glob(
+                f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_*_image.npy")
+            self.processed_files = {key: f[:-10] for key, f in enumerate(processed_files_list)}
 
-        self.curr_dir = self.train_dir
+        else:
+            self.root_dir = root_dir + "/Promise12"
+            self.train_dir = self.root_dir + "/Train"
+            self.test_dir = self.root_dir + "/Test"
 
-        file_names = os.listdir(self.curr_dir)
-        nums_in_filenames = sorted(list(set([''.join(filter(lambda i: i.isdigit(), s)) for s in file_names])))
+            self.train = train
+            self.transform = transform
 
-        test_files = random.sample(nums_in_filenames, int(len(nums_in_filenames) * 0.2))
-        train_files = [f for f in nums_in_filenames if f not in test_files]
-        self.nums_in_filenames = train_files if self.train else test_files
+            self.curr_dir = self.train_dir
 
-        self.idx_to_case_map = dict(enumerate(self.nums_in_filenames))
+            file_names = os.listdir(self.curr_dir)
+            nums_in_filenames = sorted(list(set([''.join(filter(lambda i: i.isdigit(), s)) for s in file_names])))
 
-        self.processed_files = {
-            key: f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_{key}" for key in
-            self.idx_to_case_map
-        }
+            test_files = random.sample(nums_in_filenames, int(len(nums_in_filenames) * 0.2))
+            train_files = [f for f in nums_in_filenames if f not in test_files]
+            self.nums_in_filenames = train_files if self.train else test_files
 
-    def __len__(self):
-        return len(self.idx_to_case_map)
+            self.idx_to_case_map = dict(enumerate(self.nums_in_filenames))
+
+            self.processed_files = {
+                key: f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_{key}" for key in
+                self.idx_to_case_map
+            }
 
     def __getitem__(self, idx):
         if os.path.exists(self.processed_files[idx] + '_image.npy'):
