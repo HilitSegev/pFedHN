@@ -20,7 +20,6 @@ from experiments.utils import get_device, set_logger, set_seed, str2bool
 
 ALLOWED_DATASETS = ['promise12', 'medical_segmentation_decathlon', 'nci_isbi_2013', 'prostatex']
 
-
 # logging.basicConfig(
 #     filename=f'run_{str(datetime.datetime.now()).replace(" ", "-").replace(":", "-").replace(".", "-")}.log',
 #     level=logging.INFO)
@@ -28,6 +27,7 @@ ALLOWED_DATASETS = ['promise12', 'medical_segmentation_decathlon', 'nci_isbi_201
 logging.basicConfig(
     # filename=f'run_{str(datetime.datetime.now()).replace(" ", "-").replace(":", "-").replace(".", "-")}.log',
     level=logging.INFO)
+
 
 def dice_loss_3d(pred_3d, label_3d):
     return 2 * (((pred_3d > 0.5) * (label_3d > 0.5)).sum().item() + 1) / (
@@ -143,6 +143,9 @@ def train(data_names: List[str], data_path: str,
     losses_dict = {}
     results = defaultdict(list)
     logging.info(f"Starting training with {len(nodes)} nodes")
+
+    batch_norm_layers_dict = {}
+
     for step in step_iter:
         hnet.train()
 
@@ -151,11 +154,17 @@ def train(data_names: List[str], data_path: str,
 
         # produce & load local network weights
         weights = hnet(torch.tensor([node_id], dtype=torch.long).to(device))
+        weights_with_batch_norm = {}
+        weights_with_batch_norm.update(weights)
+
+        if node_id in batch_norm_layers_dict:
+            weights_with_batch_norm.update(batch_norm_layers_dict[node_id])
+
         logging.debug(f"weights are assigned!")
 
         # keep the BatchNorm params in the state_dict
         model_dict = net.state_dict()
-        model_dict.update(weights)
+        model_dict.update(weights_with_batch_norm)
         net.load_state_dict(model_dict)
 
         # init inner optimizer
@@ -180,16 +189,18 @@ def train(data_names: List[str], data_path: str,
             losses_dict[node_id].append(prvs_loss.item())
 
             # log loss to wandb
-            wandb.log(
-                {f"target_val_loss_{node_id}": float(prvs_loss)},
-                step=len(losses_dict[node_id])
-            )
+            if (len(losses_dict[node_id]) + 1) % 5 == 0:
+                wandb.log(
+                    {f"target_val_loss_{node_id}": float(prvs_loss)},
+                    step=step
+                )
 
             prvs_acc = np.mean([dice_loss_3d(pred[i], label[i]) for i in range(pred.shape[0])])
-            wandb.log(
-                {f"target_val_avg_dice_{node_id}": float(prvs_acc)},
-                step=len(losses_dict[node_id])
-            )
+            if (len(losses_dict[node_id]) + 1) % 5 == 0:
+                wandb.log(
+                    {f"target_val_avg_dice_{node_id}": float(prvs_acc)},
+                    step=step
+                )
 
             net.train()
 
@@ -211,21 +222,27 @@ def train(data_names: List[str], data_path: str,
             if i % 10 == 0:
                 wandb.log(
                     {f"inner_step_train_loss_{node_id}": float(loss)},
-                    step=inner_steps*len(losses_dict[node_id]) + i
+                    step=step
                 )
 
             torch.nn.utils.clip_grad_norm_(net.parameters(), 50)
 
             inner_optim.step()
         # log loss to wandb
-        wandb.log(
-            {f"target_train_loss_{node_id}": float(loss)},
-            step=len(losses_dict[node_id])
-        )
+        if (len(losses_dict[node_id]) + 1) % 5 == 0:
+            wandb.log(
+                {f"target_train_loss_{node_id}": float(loss)},
+                step=step
+            )
 
         optimizer.zero_grad()
 
         final_state = net.state_dict()
+
+        # update batch_norm_dict
+        batch_norm_layers_dict[node_id] = OrderedDict(
+            {k: tensor.data for k, tensor in final_state.items() if 'running_mean' in k or 'running_var' in k})
+
         logging.debug("done with inner steps")
         # calculating delta theta
         delta_theta = OrderedDict({k: inner_state[k] - final_state[k] for k in weights.keys()})
@@ -253,6 +270,10 @@ def train(data_names: List[str], data_path: str,
             step_results, avg_loss, avg_dice, all_dice = eval_model(nodes, hnet, net, criteria, device,
                                                                     split="test")
             logging.info(f"\nStep: {step + 1}, AVG Loss: {avg_loss:.4f},  AVG Dice: {avg_dice:.4f}")
+            wandb.log(
+                {f"AVG Dice": float(avg_dice)},
+                step=step
+            )
             results['test_avg_loss'].append(avg_loss)
             results['test_avg_dice'].append(avg_dice)
 
@@ -301,7 +322,7 @@ def train(data_names: List[str], data_path: str,
         results['test_best_std_based_on_step'].append(test_best_std_based_on_step)
 
     # save models to wandb
-    torch.onnx.export(hnet, torch.tensor([node_id], dtype=torch.long),"hyper_net.onnx")
+    torch.onnx.export(hnet, torch.tensor([node_id], dtype=torch.long), "hyper_net.onnx")
     wandb.save("hyper_net.onnx")
 
     torch.onnx.export(net, img.float(), "target_net.onnx")
@@ -395,4 +416,4 @@ if __name__ == '__main__':
             eval_every=args.eval_every,
             save_path=args.save_path,
             seed=args.seed
-    )
+        )
