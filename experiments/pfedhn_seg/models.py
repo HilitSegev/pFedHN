@@ -28,69 +28,69 @@ class CNNHyper(nn.Module):
 
         self.mlp = nn.Sequential(*layers)
 
-        self.ups_0_weight = nn.Linear(hidden_dim, 64 * 32 * 2 * 2)
-        self.ups_0_bias = nn.Linear(hidden_dim, 32)
-        self.ups_1_conv_0_weight = nn.Linear(hidden_dim, 32 * 64 * 3 * 3)
-        self.ups_1_conv_1_weight = nn.Linear(hidden_dim, 32)
-        self.ups_1_conv_1_bias = nn.Linear(hidden_dim, 32)
-        self.ups_1_conv_3_weight = nn.Linear(hidden_dim, 32 * 32 * 3 * 3)
-        self.ups_1_conv_4_weight = nn.Linear(hidden_dim, 32)
-        self.ups_1_conv_4_bias = nn.Linear(hidden_dim, 32)
-        self.ups_2_weight = nn.Linear(hidden_dim, 32 * 16 * 2 * 2)
-        self.ups_2_bias = nn.Linear(hidden_dim, 16)
-        self.ups_3_conv_0_weight = nn.Linear(hidden_dim, 16 * 32 * 3 * 3)
-        self.ups_3_conv_1_weight = nn.Linear(hidden_dim, 16)
-        self.ups_3_conv_1_bias = nn.Linear(hidden_dim, 16)
-        self.ups_3_conv_3_weight = nn.Linear(hidden_dim, 16 * 16 * 3 * 3)
-        self.ups_3_conv_4_weight = nn.Linear(hidden_dim, 16)
-        self.ups_3_conv_4_bias = nn.Linear(hidden_dim, 16)
-        self.ups_4_weight = nn.Linear(hidden_dim, 16 * 8 * 2 * 2)
-        self.ups_4_bias = nn.Linear(hidden_dim, 8)
-        self.ups_5_conv_0_weight = nn.Linear(hidden_dim, 8 * 16 * 3 * 3)
-        self.ups_5_conv_1_weight = nn.Linear(hidden_dim, 8)
-        self.ups_5_conv_1_bias = nn.Linear(hidden_dim, 8)
-        self.ups_5_conv_3_weight = nn.Linear(hidden_dim, 8 * 8 * 3 * 3)
-        self.ups_5_conv_4_weight = nn.Linear(hidden_dim, 8)
-        self.ups_5_conv_4_bias = nn.Linear(hidden_dim, 8)
-        self.ups_6_weight = nn.Linear(hidden_dim, 8 * 4 * 2 * 2)
-        self.ups_6_bias = nn.Linear(hidden_dim, 4)
-        self.ups_7_conv_0_weight = nn.Linear(hidden_dim, 4 * 8 * 3 * 3)
-        self.ups_7_conv_1_weight = nn.Linear(hidden_dim, 4)
-        self.ups_7_conv_1_bias = nn.Linear(hidden_dim, 4)
-        self.ups_7_conv_3_weight = nn.Linear(hidden_dim, 4 * 4 * 3 * 3)
-        self.ups_7_conv_4_weight = nn.Linear(hidden_dim, 4)
-        self.ups_7_conv_4_bias = nn.Linear(hidden_dim, 4)
-        self.downs_0_conv_0_weight = nn.Linear(hidden_dim, 4 * 15 * 3 * 3)
-        self.downs_0_conv_1_weight = nn.Linear(hidden_dim, 4)
-        self.downs_0_conv_1_bias = nn.Linear(hidden_dim, 4)
-        self.downs_0_conv_3_weight = nn.Linear(hidden_dim, 4 * 4 * 3 * 3)
-        self.downs_0_conv_4_weight = nn.Linear(hidden_dim, 4)
-        self.downs_0_conv_4_bias = nn.Linear(hidden_dim, 4)
-        self.downs_1_conv_0_weight = nn.Linear(hidden_dim, 8 * 4 * 3 * 3)
-        self.downs_1_conv_1_weight = nn.Linear(hidden_dim, 8)
-        self.downs_1_conv_1_bias = nn.Linear(hidden_dim, 8)
-        self.downs_1_conv_3_weight = nn.Linear(hidden_dim, 8 * 8 * 3 * 3)
-        self.downs_1_conv_4_weight = nn.Linear(hidden_dim, 8)
-        self.downs_1_conv_4_bias = nn.Linear(hidden_dim, 8)
-        self.downs_2_conv_0_weight = nn.Linear(hidden_dim, 16 * 8 * 3 * 3)
-        self.downs_2_conv_1_weight = nn.Linear(hidden_dim, 16)
-        self.downs_2_conv_1_bias = nn.Linear(hidden_dim, 16)
-        self.downs_2_conv_3_weight = nn.Linear(hidden_dim, 16 * 16 * 3 * 3)
-        self.downs_2_conv_4_weight = nn.Linear(hidden_dim, 16)
-        self.downs_2_conv_4_bias = nn.Linear(hidden_dim, 16)
-        self.downs_3_conv_0_weight = nn.Linear(hidden_dim, 32 * 16 * 3 * 3)
-        self.downs_3_conv_1_weight = nn.Linear(hidden_dim, 32)
-        self.downs_3_conv_1_bias = nn.Linear(hidden_dim, 32)
-        self.downs_3_conv_3_weight = nn.Linear(hidden_dim, 32 * 32 * 3 * 3)
-        self.downs_3_conv_4_weight = nn.Linear(hidden_dim, 32)
-        self.downs_3_conv_4_bias = nn.Linear(hidden_dim, 32)
-        self.bottleneck_conv_0_weight = nn.Linear(hidden_dim, 64 * 32 * 3 * 3)
-        self.bottleneck_conv_1_weight = nn.Linear(hidden_dim, 64)
-        self.bottleneck_conv_1_bias = nn.Linear(hidden_dim, 64)
-        self.bottleneck_conv_3_weight = nn.Linear(hidden_dim, 64 * 64 * 3 * 3)
-        self.bottleneck_conv_4_weight = nn.Linear(hidden_dim, 64)
-        self.bottleneck_conv_4_bias = nn.Linear(hidden_dim, 64)
-        self.final_conv_weight = nn.Linear(hidden_dim, 15 * 4 * 1 * 1)
+        self.ups_0_weight = nn.Linear(hidden_dim, 256 * 128 * 2 * 2)
+        self.ups_0_bias = nn.Linear(hidden_dim, 128)
+        self.ups_1_conv_0_weight = nn.Linear(hidden_dim, 128 * 256 * 3 * 3)
+        self.ups_1_conv_1_weight = nn.Linear(hidden_dim, 128)
+        self.ups_1_conv_1_bias = nn.Linear(hidden_dim, 128)
+        self.ups_1_conv_3_weight = nn.Linear(hidden_dim, 128 * 128 * 3 * 3)
+        self.ups_1_conv_4_weight = nn.Linear(hidden_dim, 128)
+        self.ups_1_conv_4_bias = nn.Linear(hidden_dim, 128)
+        self.ups_2_weight = nn.Linear(hidden_dim, 128 * 64 * 2 * 2)
+        self.ups_2_bias = nn.Linear(hidden_dim, 64)
+        self.ups_3_conv_0_weight = nn.Linear(hidden_dim, 64 * 128 * 3 * 3)
+        self.ups_3_conv_1_weight = nn.Linear(hidden_dim, 64)
+        self.ups_3_conv_1_bias = nn.Linear(hidden_dim, 64)
+        self.ups_3_conv_3_weight = nn.Linear(hidden_dim, 64 * 64 * 3 * 3)
+        self.ups_3_conv_4_weight = nn.Linear(hidden_dim, 64)
+        self.ups_3_conv_4_bias = nn.Linear(hidden_dim, 64)
+        self.ups_4_weight = nn.Linear(hidden_dim, 64 * 32 * 2 * 2)
+        self.ups_4_bias = nn.Linear(hidden_dim, 32)
+        self.ups_5_conv_0_weight = nn.Linear(hidden_dim, 32 * 64 * 3 * 3)
+        self.ups_5_conv_1_weight = nn.Linear(hidden_dim, 32)
+        self.ups_5_conv_1_bias = nn.Linear(hidden_dim, 32)
+        self.ups_5_conv_3_weight = nn.Linear(hidden_dim, 32 * 32 * 3 * 3)
+        self.ups_5_conv_4_weight = nn.Linear(hidden_dim, 32)
+        self.ups_5_conv_4_bias = nn.Linear(hidden_dim, 32)
+        self.ups_6_weight = nn.Linear(hidden_dim, 32 * 16 * 2 * 2)
+        self.ups_6_bias = nn.Linear(hidden_dim, 16)
+        self.ups_7_conv_0_weight = nn.Linear(hidden_dim, 16 * 32 * 3 * 3)
+        self.ups_7_conv_1_weight = nn.Linear(hidden_dim, 16)
+        self.ups_7_conv_1_bias = nn.Linear(hidden_dim, 16)
+        self.ups_7_conv_3_weight = nn.Linear(hidden_dim, 16 * 16 * 3 * 3)
+        self.ups_7_conv_4_weight = nn.Linear(hidden_dim, 16)
+        self.ups_7_conv_4_bias = nn.Linear(hidden_dim, 16)
+        self.downs_0_conv_0_weight = nn.Linear(hidden_dim, 16 * 15 * 3 * 3)
+        self.downs_0_conv_1_weight = nn.Linear(hidden_dim, 16)
+        self.downs_0_conv_1_bias = nn.Linear(hidden_dim, 16)
+        self.downs_0_conv_3_weight = nn.Linear(hidden_dim, 16 * 16 * 3 * 3)
+        self.downs_0_conv_4_weight = nn.Linear(hidden_dim, 16)
+        self.downs_0_conv_4_bias = nn.Linear(hidden_dim, 16)
+        self.downs_1_conv_0_weight = nn.Linear(hidden_dim, 32 * 16 * 3 * 3)
+        self.downs_1_conv_1_weight = nn.Linear(hidden_dim, 32)
+        self.downs_1_conv_1_bias = nn.Linear(hidden_dim, 32)
+        self.downs_1_conv_3_weight = nn.Linear(hidden_dim, 32 * 32 * 3 * 3)
+        self.downs_1_conv_4_weight = nn.Linear(hidden_dim, 32)
+        self.downs_1_conv_4_bias = nn.Linear(hidden_dim, 32)
+        self.downs_2_conv_0_weight = nn.Linear(hidden_dim, 64 * 32 * 3 * 3)
+        self.downs_2_conv_1_weight = nn.Linear(hidden_dim, 64)
+        self.downs_2_conv_1_bias = nn.Linear(hidden_dim, 64)
+        self.downs_2_conv_3_weight = nn.Linear(hidden_dim, 64 * 64 * 3 * 3)
+        self.downs_2_conv_4_weight = nn.Linear(hidden_dim, 64)
+        self.downs_2_conv_4_bias = nn.Linear(hidden_dim, 64)
+        self.downs_3_conv_0_weight = nn.Linear(hidden_dim, 128 * 64 * 3 * 3)
+        self.downs_3_conv_1_weight = nn.Linear(hidden_dim, 128)
+        self.downs_3_conv_1_bias = nn.Linear(hidden_dim, 128)
+        self.downs_3_conv_3_weight = nn.Linear(hidden_dim, 128 * 128 * 3 * 3)
+        self.downs_3_conv_4_weight = nn.Linear(hidden_dim, 128)
+        self.downs_3_conv_4_bias = nn.Linear(hidden_dim, 128)
+        self.bottleneck_conv_0_weight = nn.Linear(hidden_dim, 256 * 128 * 3 * 3)
+        self.bottleneck_conv_1_weight = nn.Linear(hidden_dim, 256)
+        self.bottleneck_conv_1_bias = nn.Linear(hidden_dim, 256)
+        self.bottleneck_conv_3_weight = nn.Linear(hidden_dim, 256 * 256 * 3 * 3)
+        self.bottleneck_conv_4_weight = nn.Linear(hidden_dim, 256)
+        self.bottleneck_conv_4_bias = nn.Linear(hidden_dim, 256)
+        self.final_conv_weight = nn.Linear(hidden_dim, 15 * 16 * 1 * 1)
         self.final_conv_bias = nn.Linear(hidden_dim, 15)
 
         if spec_norm:
@@ -164,69 +164,69 @@ class CNNHyper(nn.Module):
         features = self.mlp(emd)
 
         weights = OrderedDict({
-            'ups.0.weight': self.ups_0_weight(features).view(64, 32, 2, 2),
-            'ups.0.bias': self.ups_0_bias(features).view(32),
-            'ups.1.conv.0.weight': self.ups_1_conv_0_weight(features).view(32, 64, 3, 3),
-            'ups.1.conv.1.weight': self.ups_1_conv_1_weight(features).view(32),
-            'ups.1.conv.1.bias': self.ups_1_conv_1_bias(features).view(32),
-            'ups.1.conv.3.weight': self.ups_1_conv_3_weight(features).view(32, 32, 3, 3),
-            'ups.1.conv.4.weight': self.ups_1_conv_4_weight(features).view(32),
-            'ups.1.conv.4.bias': self.ups_1_conv_4_bias(features).view(32),
-            'ups.2.weight': self.ups_2_weight(features).view(32, 16, 2, 2),
-            'ups.2.bias': self.ups_2_bias(features).view(16),
-            'ups.3.conv.0.weight': self.ups_3_conv_0_weight(features).view(16, 32, 3, 3),
-            'ups.3.conv.1.weight': self.ups_3_conv_1_weight(features).view(16),
-            'ups.3.conv.1.bias': self.ups_3_conv_1_bias(features).view(16),
-            'ups.3.conv.3.weight': self.ups_3_conv_3_weight(features).view(16, 16, 3, 3),
-            'ups.3.conv.4.weight': self.ups_3_conv_4_weight(features).view(16),
-            'ups.3.conv.4.bias': self.ups_3_conv_4_bias(features).view(16),
-            'ups.4.weight': self.ups_4_weight(features).view(16, 8, 2, 2),
-            'ups.4.bias': self.ups_4_bias(features).view(8),
-            'ups.5.conv.0.weight': self.ups_5_conv_0_weight(features).view(8, 16, 3, 3),
-            'ups.5.conv.1.weight': self.ups_5_conv_1_weight(features).view(8),
-            'ups.5.conv.1.bias': self.ups_5_conv_1_bias(features).view(8),
-            'ups.5.conv.3.weight': self.ups_5_conv_3_weight(features).view(8, 8, 3, 3),
-            'ups.5.conv.4.weight': self.ups_5_conv_4_weight(features).view(8),
-            'ups.5.conv.4.bias': self.ups_5_conv_4_bias(features).view(8),
-            'ups.6.weight': self.ups_6_weight(features).view(8, 4, 2, 2),
-            'ups.6.bias': self.ups_6_bias(features).view(4),
-            'ups.7.conv.0.weight': self.ups_7_conv_0_weight(features).view(4, 8, 3, 3),
-            'ups.7.conv.1.weight': self.ups_7_conv_1_weight(features).view(4),
-            'ups.7.conv.1.bias': self.ups_7_conv_1_bias(features).view(4),
-            'ups.7.conv.3.weight': self.ups_7_conv_3_weight(features).view(4, 4, 3, 3),
-            'ups.7.conv.4.weight': self.ups_7_conv_4_weight(features).view(4),
-            'ups.7.conv.4.bias': self.ups_7_conv_4_bias(features).view(4),
-            'downs.0.conv.0.weight': self.downs_0_conv_0_weight(features).view(4, 15, 3, 3),
-            'downs.0.conv.1.weight': self.downs_0_conv_1_weight(features).view(4),
-            'downs.0.conv.1.bias': self.downs_0_conv_1_bias(features).view(4),
-            'downs.0.conv.3.weight': self.downs_0_conv_3_weight(features).view(4, 4, 3, 3),
-            'downs.0.conv.4.weight': self.downs_0_conv_4_weight(features).view(4),
-            'downs.0.conv.4.bias': self.downs_0_conv_4_bias(features).view(4),
-            'downs.1.conv.0.weight': self.downs_1_conv_0_weight(features).view(8, 4, 3, 3),
-            'downs.1.conv.1.weight': self.downs_1_conv_1_weight(features).view(8),
-            'downs.1.conv.1.bias': self.downs_1_conv_1_bias(features).view(8),
-            'downs.1.conv.3.weight': self.downs_1_conv_3_weight(features).view(8, 8, 3, 3),
-            'downs.1.conv.4.weight': self.downs_1_conv_4_weight(features).view(8),
-            'downs.1.conv.4.bias': self.downs_1_conv_4_bias(features).view(8),
-            'downs.2.conv.0.weight': self.downs_2_conv_0_weight(features).view(16, 8, 3, 3),
-            'downs.2.conv.1.weight': self.downs_2_conv_1_weight(features).view(16),
-            'downs.2.conv.1.bias': self.downs_2_conv_1_bias(features).view(16),
-            'downs.2.conv.3.weight': self.downs_2_conv_3_weight(features).view(16, 16, 3, 3),
-            'downs.2.conv.4.weight': self.downs_2_conv_4_weight(features).view(16),
-            'downs.2.conv.4.bias': self.downs_2_conv_4_bias(features).view(16),
-            'downs.3.conv.0.weight': self.downs_3_conv_0_weight(features).view(32, 16, 3, 3),
-            'downs.3.conv.1.weight': self.downs_3_conv_1_weight(features).view(32),
-            'downs.3.conv.1.bias': self.downs_3_conv_1_bias(features).view(32),
-            'downs.3.conv.3.weight': self.downs_3_conv_3_weight(features).view(32, 32, 3, 3),
-            'downs.3.conv.4.weight': self.downs_3_conv_4_weight(features).view(32),
-            'downs.3.conv.4.bias': self.downs_3_conv_4_bias(features).view(32),
-            'bottleneck.conv.0.weight': self.bottleneck_conv_0_weight(features).view(64, 32, 3, 3),
-            'bottleneck.conv.1.weight': self.bottleneck_conv_1_weight(features).view(64),
-            'bottleneck.conv.1.bias': self.bottleneck_conv_1_bias(features).view(64),
-            'bottleneck.conv.3.weight': self.bottleneck_conv_3_weight(features).view(64, 64, 3, 3),
-            'bottleneck.conv.4.weight': self.bottleneck_conv_4_weight(features).view(64),
-            'bottleneck.conv.4.bias': self.bottleneck_conv_4_bias(features).view(64),
-            'final_conv.weight': self.final_conv_weight(features).view(15, 4, 1, 1),
+            'ups.0.weight': self.ups_0_weight(features).view(256, 128, 2, 2),
+            'ups.0.bias': self.ups_0_bias(features).view(128),
+            'ups.1.conv.0.weight': self.ups_1_conv_0_weight(features).view(128, 256, 3, 3),
+            'ups.1.conv.1.weight': self.ups_1_conv_1_weight(features).view(128),
+            'ups.1.conv.1.bias': self.ups_1_conv_1_bias(features).view(128),
+            'ups.1.conv.3.weight': self.ups_1_conv_3_weight(features).view(128, 128, 3, 3),
+            'ups.1.conv.4.weight': self.ups_1_conv_4_weight(features).view(128),
+            'ups.1.conv.4.bias': self.ups_1_conv_4_bias(features).view(128),
+            'ups.2.weight': self.ups_2_weight(features).view(128, 64, 2, 2),
+            'ups.2.bias': self.ups_2_bias(features).view(64),
+            'ups.3.conv.0.weight': self.ups_3_conv_0_weight(features).view(64, 128, 3, 3),
+            'ups.3.conv.1.weight': self.ups_3_conv_1_weight(features).view(64),
+            'ups.3.conv.1.bias': self.ups_3_conv_1_bias(features).view(64),
+            'ups.3.conv.3.weight': self.ups_3_conv_3_weight(features).view(64, 64, 3, 3),
+            'ups.3.conv.4.weight': self.ups_3_conv_4_weight(features).view(64),
+            'ups.3.conv.4.bias': self.ups_3_conv_4_bias(features).view(64),
+            'ups.4.weight': self.ups_4_weight(features).view(64, 32, 2, 2),
+            'ups.4.bias': self.ups_4_bias(features).view(32),
+            'ups.5.conv.0.weight': self.ups_5_conv_0_weight(features).view(32, 64, 3, 3),
+            'ups.5.conv.1.weight': self.ups_5_conv_1_weight(features).view(32),
+            'ups.5.conv.1.bias': self.ups_5_conv_1_bias(features).view(32),
+            'ups.5.conv.3.weight': self.ups_5_conv_3_weight(features).view(32, 32, 3, 3),
+            'ups.5.conv.4.weight': self.ups_5_conv_4_weight(features).view(32),
+            'ups.5.conv.4.bias': self.ups_5_conv_4_bias(features).view(32),
+            'ups.6.weight': self.ups_6_weight(features).view(32, 16, 2, 2),
+            'ups.6.bias': self.ups_6_bias(features).view(16),
+            'ups.7.conv.0.weight': self.ups_7_conv_0_weight(features).view(16, 32, 3, 3),
+            'ups.7.conv.1.weight': self.ups_7_conv_1_weight(features).view(16),
+            'ups.7.conv.1.bias': self.ups_7_conv_1_bias(features).view(16),
+            'ups.7.conv.3.weight': self.ups_7_conv_3_weight(features).view(16, 16, 3, 3),
+            'ups.7.conv.4.weight': self.ups_7_conv_4_weight(features).view(16),
+            'ups.7.conv.4.bias': self.ups_7_conv_4_bias(features).view(16),
+            'downs.0.conv.0.weight': self.downs_0_conv_0_weight(features).view(16, 15, 3, 3),
+            'downs.0.conv.1.weight': self.downs_0_conv_1_weight(features).view(16),
+            'downs.0.conv.1.bias': self.downs_0_conv_1_bias(features).view(16),
+            'downs.0.conv.3.weight': self.downs_0_conv_3_weight(features).view(16, 16, 3, 3),
+            'downs.0.conv.4.weight': self.downs_0_conv_4_weight(features).view(16),
+            'downs.0.conv.4.bias': self.downs_0_conv_4_bias(features).view(16),
+            'downs.1.conv.0.weight': self.downs_1_conv_0_weight(features).view(32, 16, 3, 3),
+            'downs.1.conv.1.weight': self.downs_1_conv_1_weight(features).view(32),
+            'downs.1.conv.1.bias': self.downs_1_conv_1_bias(features).view(32),
+            'downs.1.conv.3.weight': self.downs_1_conv_3_weight(features).view(32, 32, 3, 3),
+            'downs.1.conv.4.weight': self.downs_1_conv_4_weight(features).view(32),
+            'downs.1.conv.4.bias': self.downs_1_conv_4_bias(features).view(32),
+            'downs.2.conv.0.weight': self.downs_2_conv_0_weight(features).view(64, 32, 3, 3),
+            'downs.2.conv.1.weight': self.downs_2_conv_1_weight(features).view(64),
+            'downs.2.conv.1.bias': self.downs_2_conv_1_bias(features).view(64),
+            'downs.2.conv.3.weight': self.downs_2_conv_3_weight(features).view(64, 64, 3, 3),
+            'downs.2.conv.4.weight': self.downs_2_conv_4_weight(features).view(64),
+            'downs.2.conv.4.bias': self.downs_2_conv_4_bias(features).view(64),
+            'downs.3.conv.0.weight': self.downs_3_conv_0_weight(features).view(128, 64, 3, 3),
+            'downs.3.conv.1.weight': self.downs_3_conv_1_weight(features).view(128),
+            'downs.3.conv.1.bias': self.downs_3_conv_1_bias(features).view(128),
+            'downs.3.conv.3.weight': self.downs_3_conv_3_weight(features).view(128, 128, 3, 3),
+            'downs.3.conv.4.weight': self.downs_3_conv_4_weight(features).view(128),
+            'downs.3.conv.4.bias': self.downs_3_conv_4_bias(features).view(128),
+            'bottleneck.conv.0.weight': self.bottleneck_conv_0_weight(features).view(256, 128, 3, 3),
+            'bottleneck.conv.1.weight': self.bottleneck_conv_1_weight(features).view(256),
+            'bottleneck.conv.1.bias': self.bottleneck_conv_1_bias(features).view(256),
+            'bottleneck.conv.3.weight': self.bottleneck_conv_3_weight(features).view(256, 256, 3, 3),
+            'bottleneck.conv.4.weight': self.bottleneck_conv_4_weight(features).view(256),
+            'bottleneck.conv.4.bias': self.bottleneck_conv_4_bias(features).view(256),
+            'final_conv.weight': self.final_conv_weight(features).view(15, 16, 1, 1),
             'final_conv.bias': self.final_conv_bias(features).view(15)
         })
         return weights
@@ -304,7 +304,7 @@ class CNNTarget(nn.Module):
 
 def test():
     x = torch.randn((3, 15, 161, 161))
-    model = CNNTarget(in_channels=15, out_channels=15, features=[4, 8, 16, 32])
+    model = CNNTarget(in_channels=15, out_channels=15, features=[16, 32, 64, 128])
     preds = model(x)
     # assert preds.shape == x.shape
 
