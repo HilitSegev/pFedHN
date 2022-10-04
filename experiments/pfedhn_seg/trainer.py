@@ -103,9 +103,10 @@ def train(data_names: List[str], data_path: str,
         embed_dim = int(1 + len(nodes) / 4)
 
     if all([d in ALLOWED_DATASETS for d in data_names]):
-        hnet = CNNHyper(len(nodes), embed_dim, hidden_dim=hyper_hid,
-                        n_hidden=n_hidden, n_kernels=n_kernels, out_dim=100)
-        net = CNNTarget(in_channels=15, out_channels=15, features=[4, 8, 16, 32])
+        # hnet = CNNHyper(len(nodes), embed_dim, hidden_dim=hyper_hid,
+        #                 n_hidden=n_hidden, n_kernels=n_kernels, out_dim=100)
+        net = CNNTarget(in_channels=15, out_channels=15, features=[16, 32, 64, 128])
+        hnet = CNNHyper(len(nodes), embed_dim, hidden_dim=hyper_hid, model=net, n_hidden=n_hidden)
     else:
         raise ValueError(f"choose data_name from {ALLOWED_DATASETS}")
 
@@ -249,7 +250,7 @@ def train(data_names: List[str], data_path: str,
 
         # calculating phi gradient
         hnet_grads = torch.autograd.grad(
-            list(weights.values()), hnet.parameters(), grad_outputs=list(delta_theta.values())
+            list(weights.values()), hnet.parameters(), grad_outputs=list(delta_theta.values()), allow_unused=True
         )
 
         # update hnet weights
@@ -322,7 +323,7 @@ def train(data_names: List[str], data_path: str,
         results['test_best_std_based_on_step'].append(test_best_std_based_on_step)
 
     # save models to wandb
-    torch.onnx.export(hnet, torch.tensor([node_id], dtype=torch.long), "hyper_net.onnx")
+    torch.onnx.export(hnet, torch.tensor([node_id], dtype=torch.long).to(device), "hyper_net.onnx")
     wandb.save("hyper_net.onnx")
 
     torch.onnx.export(net, img.float(), "target_net.onnx")
@@ -393,7 +394,7 @@ if __name__ == '__main__':
     wandb.login()
     with wandb.init(project='pFedHN-MedicalSegmentation',
                     entity='pfedhnmed',
-                    name='UNET-3D-FULL',
+                    name='UNET-3D-FULL-16-32-64-128',
                     config=args):
         config = wandb.config
         train(
