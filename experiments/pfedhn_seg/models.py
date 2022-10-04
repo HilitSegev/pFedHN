@@ -25,6 +25,9 @@ class CNNHyper(nn.Module):
         self.model = model
         self.embeddings = nn.Embedding(num_embeddings=n_nodes, embedding_dim=embedding_dim)
 
+        if out_layers is None:
+            self.out_layers = model.state_dict().keys()
+
         layers = [
             spectral_norm(nn.Linear(embedding_dim, hidden_dim)) if spec_norm else nn.Linear(embedding_dim, hidden_dim),
         ]
@@ -38,7 +41,7 @@ class CNNHyper(nn.Module):
 
         self.predicted_layers = {
             k: nn.Linear(hidden_dim, math.prod(tuple(layer.size()))) for k, layer in model.state_dict().items() if
-            k.endswith('weight') or k.endswith('bias')
+            (k.endswith('weight') or k.endswith('bias')) and k in self.out_layers
         }
 
         if spec_norm:
