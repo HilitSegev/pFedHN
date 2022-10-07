@@ -14,7 +14,7 @@ class CNNHyper(nn.Module):
             embedding_dim,
             model,
             out_layers=None,
-            in_channels=15,
+            in_channels=1,
             hidden_dim=100,
             n_hidden=1,
             spec_norm=False
@@ -27,6 +27,8 @@ class CNNHyper(nn.Module):
 
         if out_layers is None:
             self.out_layers = model.state_dict().keys()
+        else:
+            self.out_layers = out_layers
 
         layers = [
             spectral_norm(nn.Linear(embedding_dim, hidden_dim)) if spec_norm else nn.Linear(embedding_dim, hidden_dim),
@@ -293,12 +295,14 @@ class DoubleConv(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(DoubleConv, self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, 3, 1, 1, bias=False),
-            nn.BatchNorm2d(out_channels),
+            nn.Conv3d(in_channels, out_channels, 3, 1, 1, bias=False),
+            nn.BatchNorm3d(out_channels),
             nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels, 3, 1, 1, bias=False),
-            nn.BatchNorm2d(out_channels),
+            nn.Dropout3d(p=0.2),
+            nn.Conv3d(out_channels, out_channels, 3, 1, 1, bias=False),
+            nn.BatchNorm3d(out_channels),
             nn.ReLU(inplace=True),
+            nn.Dropout3d(p=0.2),
         )
 
     def forward(self, x):
@@ -311,12 +315,12 @@ class CNNTarget(nn.Module):
     """
 
     def __init__(
-            self, in_channels=15, out_channels=15, features=[64, 128, 256, 512],
+            self, in_channels=1, out_channels=1, features=[64, 128, 256, 512],
     ):
         super(CNNTarget, self).__init__()
         self.ups = nn.ModuleList()
         self.downs = nn.ModuleList()
-        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.pool = nn.MaxPool3d(kernel_size=2, stride=2, ceil_mode=True)
 
         # Down part of UNET
         for feature in features:
@@ -326,14 +330,14 @@ class CNNTarget(nn.Module):
         # Up part of UNET
         for feature in reversed(features):
             self.ups.append(
-                nn.ConvTranspose2d(
+                nn.ConvTranspose3d(
                     feature * 2, feature, kernel_size=2, stride=2,
                 )
             )
             self.ups.append(DoubleConv(feature * 2, feature))
 
         self.bottleneck = DoubleConv(features[-1], features[-1] * 2)
-        self.final_conv = nn.Conv2d(features[0], out_channels, kernel_size=1)
+        self.final_conv = nn.Conv3d(features[0], out_channels, kernel_size=1)
 
     def forward(self, x):
         skip_connections = []
@@ -361,7 +365,7 @@ class CNNTarget(nn.Module):
 
 def test():
     x = torch.randn((3, 15, 161, 161))
-    model = CNNTarget(in_channels=15, out_channels=15, features=[16, 32, 64, 128])
+    model = CNNTarget(in_channels=1, out_channels=1, features=[16, 32, 64, 128])
     preds = model(x)
 
     test_hyper = CNNHyper(4, 1, hidden_dim=100,

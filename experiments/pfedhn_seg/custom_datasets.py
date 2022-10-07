@@ -16,7 +16,7 @@ import os
 
 from torchvision.transforms import transforms
 
-MRI_SCAN_SHAPE = (15, 128, 128)
+MRI_SCAN_SHAPE = (16, 128, 128)
 
 
 def random_crop(arr, shape, idx=None, crop=False):
@@ -39,6 +39,12 @@ def random_crop(arr, shape, idx=None, crop=False):
         downed = np.round(nd.zoom(arr, zoom=dsfactor))
         return downed, idx
 
+def reshape_to_3d(arr):
+    if len(arr.shape) == 3:
+        arr = random_crop(arr, MRI_SCAN_SHAPE, crop=False)[0]
+        return np.reshape(arr, (1, arr.shape[0], arr.shape[1], arr.shape[2]))
+    else:
+        return arr
 
 class BaseDataset(Dataset):
     def __len__(self):
@@ -92,7 +98,7 @@ class PROSTATEx(BaseDataset):
             image, label = np.load(self.processed_files[idx] + '_image.npy'), \
                            np.load(self.processed_files[idx] + '_label.npy')
             image = (image - image.min()) / (image.max() - image.min())
-            return image, label
+            return reshape_to_3d(image), reshape_to_3d(label)
 
         patient_dir = self.idx_to_case_map[idx]
 
@@ -187,7 +193,7 @@ class NciIsbi2013(BaseDataset):
             image, label = np.load(self.processed_files[idx] + '_image.npy'), \
                            np.load(self.processed_files[idx] + '_label.npy')
             image = (image - image.min()) / (image.max() - image.min())
-            return image, label
+            return reshape_to_3d(image), reshape_to_3d(label)
 
         patient_dir = self.idx_to_case_map[idx]
 
@@ -271,7 +277,7 @@ class MedicalSegmentationDecathlon(BaseDataset):
             image, label = np.load(self.processed_files[idx] + '_image.npy'), \
                            np.load(self.processed_files[idx] + '_label.npy')
             image = (image - image.min()) / (image.max() - image.min())
-            return image, label
+            return reshape_to_3d(image), reshape_to_3d(label)
 
         nii_file_name = self.idx_to_case_map[idx]
 
@@ -352,7 +358,7 @@ class Promise12(BaseDataset):
             image, label = np.load(self.processed_files[idx] + '_image.npy'), \
                            np.load(self.processed_files[idx] + '_label.npy')
             image = (image - image.min()) / (image.max() - image.min())
-            return image, label
+            return reshape_to_3d(image), reshape_to_3d(label)
 
         case_idx = self.idx_to_case_map[idx]
 
