@@ -99,7 +99,7 @@ def train(data_names: List[str], data_path: str,
           steps: int, inner_steps: int, optim: str, lr: float, inner_lr: float,
           embed_lr: float, wd: float, inner_wd: float, embed_dim: int, hyper_hid: int,
           n_hidden: int, n_kernels: int, bs: int, device, eval_every: int, save_path: Path,
-          seed: int, no_hn_steps: int) -> None:
+          seed: int, no_hn_steps: int, dropout_p: float) -> None:
     ###############################
     # init nodes, hnet, local net #
     ###############################
@@ -113,7 +113,7 @@ def train(data_names: List[str], data_path: str,
     if all([d in ALLOWED_DATASETS for d in data_names]):
         # hnet = CNNHyper(len(nodes), embed_dim, hidden_dim=hyper_hid,
         #                 n_hidden=n_hidden, n_kernels=n_kernels, out_dim=100)
-        net = CNNTarget(in_channels=1, out_channels=1, features=[16, 32, 64, 128])
+        net = CNNTarget(in_channels=1, out_channels=1, features=[16, 32, 64, 128], dropout_p=dropout_p)
 
         last_conv_block = [
             l for l in net.state_dict() if
@@ -404,6 +404,7 @@ if __name__ == '__main__':
     parser.add_argument("--hyper-hid", type=int, default=100, help="hypernet hidden dim")
     parser.add_argument("--spec-norm", type=str2bool, default=False, help="hypernet hidden dim")
     parser.add_argument("--nkernels", type=int, default=16, help="number of kernels for cnn model")
+    parser.add_argument("--dropout-p", type=float, default=0.5, help="p for dropout layers")
 
     #############################
     #       General args        #
@@ -447,5 +448,6 @@ if __name__ == '__main__':
             eval_every=args.eval_every,
             save_path=args.save_path,
             seed=args.seed,
-            no_hn_steps=args.no_hn_steps
+            no_hn_steps=args.no_hn_steps,
+            dropout_p=args.dropout_p
         )
