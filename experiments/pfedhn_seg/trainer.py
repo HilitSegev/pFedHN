@@ -201,8 +201,12 @@ def train(data_names: List[str], data_path: str,
         # NOTE: evaluation on sent model
         with torch.no_grad():
             net.eval()
-            # TODO: change back to val loader
-            batch = next(iter(nodes.val_loaders[node_id]))
+            # TODO: is this the way to handle StopIteration?
+            try:
+                batch = next(iter(nodes.val_loaders[node_id]))
+            except StopIteration:
+                print(f"Stop iteration for val in {node_id}")
+                continue
             img, label = tuple(t.to(device) for t in batch)
             pred = net(img.float())
             prvs_loss = criteria(pred, label)
@@ -298,6 +302,10 @@ def train(data_names: List[str], data_path: str,
             logging.info(f"\nStep: {step + 1}, AVG Loss: {avg_loss:.4f},  AVG Dice: {avg_dice:.4f}")
             wandb.log(
                 {f"AVG Dice": float(avg_dice)},
+                step=step
+            )
+            wandb.log(
+                {f"Dice - Node {node_id}": float(node_dice) for node_id, node_dice in enumerate(all_dice)},
                 step=step
             )
             results['test_avg_loss'].append(avg_loss)

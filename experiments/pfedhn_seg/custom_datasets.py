@@ -1,381 +1,252 @@
-import glob
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import os
 import random
+import SimpleITK as sitk
+from torch.utils.data import Dataset, DataLoader
+import pydicom
+import glob
+import json
+import nrrd
+import nibabel as nib
+from torchvision import transforms
 
 random.seed(1234)
 
-import nrrd
-import pydicom
-from scipy import ndimage as nd
-from torch.utils.data.dataset import Dataset
-import SimpleITK as sitk
-import nibabel as nib
 
-import numpy as np
-import matplotlib.pylab as plt
-import os
-
-from torchvision.transforms import transforms
-
-MRI_SCAN_SHAPE = (16, 128, 128)
+# utils
+def split_dict(d, pct):
+    """Split a dictionary into two dictionaries, one with pct of the keys and one with the rest."""
+    keys = list(d.keys())
+    random.shuffle(keys)
+    split = int(len(keys) * pct)
+    return {k: d[k] for k in keys[:split]}, {k: d[k] for k in keys[split:]}
 
 
-def random_crop(arr, shape, idx=None, crop=False):
-    assert len(arr.shape) == len(shape)
-    if crop:
-        for i in range(len(shape)):
-            try:
-                assert shape[i] <= arr.shape[i]
-            except AssertionError:
-                print(f"arr.shape = {arr.shape}")
-                print(f"shape = {shape}")
-                raise AssertionError
-        if idx is None:
-            idx = [np.random.randint(0, arr.shape[i] - shape[i]) if arr.shape[i] > shape[i] else 0 for i in
-                   range(len(shape))]
-        return arr[[slice(idx[i], idx[i] + shape[i]) for i in range(len(shape))]], idx
-    else:
-        # resize image to "shape"
-        dsfactor = [w / float(f) for w, f in zip(shape, arr.shape)]
-        downed = np.round(nd.zoom(arr, zoom=dsfactor))
-        return downed, idx
+def random_crop(image, size):
+    """Randomly crop a 3D image to a given size."""
+    _, x, y, z = image.shape
+    cx, cy, cz = size
+    x1 = random.randint(0, x - cx - 1) if x > cx + 1 else 0
+    y1 = random.randint(0, y - cy - 1) if y > cy + 1 else 0
+    z1 = random.randint(0, z - cz - 1) if z > cz + 1 else 0
+    return x1, y1, z1
 
-def reshape_to_3d(arr):
-    if len(arr.shape) == 3:
-        arr = random_crop(arr, MRI_SCAN_SHAPE, crop=False)[0]
-        return np.reshape(arr, (1, arr.shape[0], arr.shape[1], arr.shape[2]))
-    else:
-        return arr
 
 class BaseDataset(Dataset):
+    def is_valid(self, image_path, label_path):
+        im = self.load_image(image_path)
+        label = self.load_label(label_path)
+        if im.shape != label.shape:
+            if len(im.shape) == len(label.shape):
+                print(f"image: {im.shape} | label: {label.shape}")
+                return False
+
+        return True
+
+    def load_image(self, path):
+        pass
+
+    def load_label(self, path):
+        return self.load_image(path)
+
+    def get_id_to_path_dict(self, root_dir):
+        pass
+
+    def __init__(self, root_dir, train=True, transform=None, **kwargs):
+        self.root_dir = root_dir
+
+        self.scan_size = (16, 160, 160)
+        self.full_id_to_path_dict = self.get_id_to_path_dict(root_dir)
+        self.train = train
+
+        # remove invalid samples
+        self.full_id_to_path_dict = {k: v for k, v in self.full_id_to_path_dict.items() if self.is_valid(v[0], v[1])}
+        print(f"{self.__class__.__name__} \t {len(self.full_id_to_path_dict)}")
+
+        train_dict, test_dict = split_dict(self.full_id_to_path_dict, 0.8)
+
+        if self.train:
+            self.id_to_path_dict = {idx: v for idx, v in enumerate(train_dict.values())}
+        else:
+            self.id_to_path_dict = {idx: v for idx, v in enumerate(test_dict.values())}
+
+        self.transform = transform
+
     def __len__(self):
-        return len(self.processed_files)
+        return len(self.id_to_path_dict)
 
-
-class PROSTATEx(BaseDataset):
-    """PROSTATEx Dataset"""
-
-    def __init__(self, root_dir, train=True, transform=None, **kwargs):
-        """
-        Args:
-            root_dir (string): Directory with an inner dir named "PROSTATEx".
-                |- root_dir
-                |  |- PROSTATEx
-                |  |  |- Labels
-                |  |  |  |- PROSTATEx
-                |  |  |- Samples
-                |  |  |  |- PROSTATEx
-
-            train (bool): Whether to take the training dataset or the test dataset
-            transform (callable, optional): Optional transform to be applied on a sample.
-        """
-        # check if processed files exist
-        self.train = train
-        self.transform = transform
-        if os.path.exists(f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_0_image.npy"):
-            processed_files_list = glob.glob(f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_*_image.npy")
-            self.processed_files = {key: f[:-10] for key, f in enumerate(processed_files_list)}
-        else:
-            self.root_dir = root_dir + "/PROSTATEx"
-
-            self.imgs_dir = self.root_dir + "/Samples" + "/PROSTATEx"
-            self.labels_dir = self.root_dir + "/Labels" + "/PROSTATEx"
-
-            file_names = [f for f in os.listdir(f"{self.imgs_dir}") if f.startswith("Prostate")]
-
-            test_files = random.sample(file_names, int(len(file_names) * 0.2))
-            train_files = [f for f in file_names if f not in test_files]
-            self.file_names = train_files if self.train else test_files
-
-            self.idx_to_case_map = dict(enumerate(self.file_names))
-
-            self.processed_files = {
-                key: f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_{key}" for key in
-                self.idx_to_case_map
-            }
+    def is_cached(self, idx):
+        assert os.path.exists(self.root_dir + "/cache")
+        file_name = f"{self.__class__.__name__}__{'train' if self.train else 'test'}__{idx}"
+        return os.path.exists(self.root_dir + "/cache/" + file_name + "__image.npy")
 
     def __getitem__(self, idx):
-        if os.path.exists(self.processed_files[idx] + '_image.npy'):
-            image, label = np.load(self.processed_files[idx] + '_image.npy'), \
-                           np.load(self.processed_files[idx] + '_label.npy')
-            image = (image - image.min()) / (image.max() - image.min())
-            return reshape_to_3d(image), reshape_to_3d(label)
-
-        patient_dir = self.idx_to_case_map[idx]
-
-        dcm_files_list = glob.glob(f'{self.imgs_dir}/{patient_dir}/**/*.dcm', recursive=True)
-
-        unstacked_list = []
-        for dicom_filepath in dcm_files_list:
-            # convert dicom file into jpg file
-            np_pixel_array = pydicom.read_file(dicom_filepath).pixel_array
-            unstacked_list.append(np_pixel_array)
-        np_scans = np.array(unstacked_list).astype(float)
-
-        # swap axes to match the shape of other Datasets
-        # np_scans = np.swapaxes(np_scans, 0, 2)
-
-        # normalize np_scans to be 0-255
-        np_scans = 255 * (np_scans - np_scans.min()) / (np_scans.max() - np_scans.min())
-
-        # read labels
-        dicom_filepath = glob.glob(f'{self.labels_dir}/{patient_dir}/**/*.dcm', recursive=True)[0]
-
-        # convert dicom file into jpg file
-        # TODO: there are 4 segmentations, I'm not sure which one to use.
-        # Looking at the images, it seems that seg_id=1 is the closest to other datasets.
-        seg_id = 1
-        np_labels = pydicom.read_file(dicom_filepath).pixel_array[19 * seg_id:19 * (seg_id + 1), :, :].astype(float)
-        np_labels, idx = random_crop(np_labels, MRI_SCAN_SHAPE)
-
-        return random_crop(np_scans, MRI_SCAN_SHAPE, idx)[0], np_labels
-
-
-class NciIsbi2013(BaseDataset):
-    """NCI-ISBI-2013 Dataset"""
-
-    def __init__(self, root_dir, train=True, transform=None, **kwargs):
-        """
-        Args:
-            root_dir (string): Directory with an inner dir named "NCI-ISBI-2013".
-                |- root_dir
-                |  |- NCI-ISBI-2013
-                |  |  |- ISBI-Prostate-Challenge-Training # Train images
-                |  |  |- ISBI-Prostate-Challenge-Testing # Test images
-                |  |  |- Labels
-                |  |  |- |- Test # Test labels
-                |  |  |- |- Train # Train labels
-
-            train (bool): Whether to take the training dataset or the test dataset
-            transform (callable, optional): Optional transform to be applied on a sample.
-        """
-        # check if processed files exist
-        self.train = train
-        self.transform = transform
-        if os.path.exists(
-                f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_0_image.npy"):
-            processed_files_list = glob.glob(
-                f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_*_image.npy")
-            self.processed_files = {key: f[:-10] for key, f in enumerate(processed_files_list)}
-        else:
-            self.root_dir = root_dir + "/NCI-ISBI-2013"
-
-            self.train_imgs_dir = self.root_dir + "/ISBI-Prostate-Challenge-Training"
-            self.train_labels_dir = self.root_dir + "/Labels/Training"
-            self.test_imgs_dir = self.root_dir + "/ISBI-Prostate-Challenge-Testing"
-            self.test_labels_dir = self.root_dir + "/Labels/Test"
-
-
-            self.curr_imgs_dir = self.train_imgs_dir
-
-            subdir_to_prefix = {
-                'Prostate-3T': 'Prostate3T',
-                'PROSTATE-DIAGNOSIS': 'ProstateDx'
-            }
-
-            file_names = sum([[f"{subdir}/{f}" for f in
-                               os.listdir(f"{self.curr_imgs_dir}/{subdir}") if f.startswith(subdir_to_prefix[subdir])] for
-                              subdir in subdir_to_prefix], [])
-
-            test_files = random.sample(file_names, int(len(file_names) * 0.2))
-            train_files = [f for f in file_names if f not in test_files]
-            self.file_names = train_files if self.train else test_files
-
-            self.idx_to_case_map = dict(enumerate(self.file_names))
-
-            self.processed_files = {
-            key: f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_{key}" for key in
-            self.idx_to_case_map
-        }
-
-
-    def __getitem__(self, idx):
-        if os.path.exists(self.processed_files[idx] + '_image.npy'):
-            image, label = np.load(self.processed_files[idx] + '_image.npy'), \
-                           np.load(self.processed_files[idx] + '_label.npy')
-            image = (image - image.min()) / (image.max() - image.min())
-            return reshape_to_3d(image), reshape_to_3d(label)
-
-        patient_dir = self.idx_to_case_map[idx]
-
-        dcm_files_list = glob.glob(f'{self.curr_imgs_dir}/{patient_dir}/**/*.dcm', recursive=True)
-        unstacked_list = []
-        for dicom_filepath in dcm_files_list:
-            # convert dicom file into jpg file
-            np_pixel_array = pydicom.read_file(dicom_filepath).pixel_array
-            unstacked_list.append(np_pixel_array)
-        np_scans = np.array(unstacked_list).astype(float)
-
-        # swap axes to match the shape of other Datasets
-        # np_scans = np.swapaxes(np_scans, 0, 2)
-
-        # normalize np_scans to be 0-255
-        np_scans = 255 * (np_scans - np_scans.min()) / (np_scans.max() - np_scans.min())
-
-        # read labels
-        labels_path = [f for f in os.listdir(self.train_labels_dir) if f.startswith(patient_dir.split("/")[-1])][0]
-        np_labels, header = nrrd.read(f"{self.train_labels_dir}/{labels_path}")
-        np_labels = np.swapaxes(np_labels, 0, 2).astype(float)
-
-        # remove labels of 2
-        np_labels = np.where(np_labels == 2, 1, np_labels)
-
-        np_labels, idx = random_crop(np_labels, MRI_SCAN_SHAPE)
-
-        return random_crop(np_scans, MRI_SCAN_SHAPE, idx)[0], np_labels
-
-
-class MedicalSegmentationDecathlon(BaseDataset):
-    """MedicalSegmentationDecathlon Dataset"""
-
-    def __init__(self, root_dir, train=True, transform=None, **kwargs):
-        """
-        Args:
-            root_dir (string): Directory with an inner dir named "MedicalSegmentationDecathlon".
-                |- root_dir
-                |  |- MedicalSegmentationDecathlon
-                |  |  |- imagesTr # Train images
-                |  |  |- imagesTs # Test images
-                |  |  |- labelsTr # Train labels
-            train (bool): Whether to take the training dataset or the test dataset
-            transform (callable, optional): Optional transform to be applied on a sample.
-        """
-        # check if processed files exist
-        self.train = train
-        self.transform = transform
-        if os.path.exists(
-                f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_0_image.npy"):
-            processed_files_list = glob.glob(
-                f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_*_image.npy")
-            self.processed_files = {key: f[:-10] for key, f in enumerate(processed_files_list)}
+        # print(f"{self.__class__} | idx = {idx}")
+        if self.is_cached(idx):
+            # load image, label from cache
+            file_name = f"{self.__class__.__name__}__{'train' if self.train else 'test'}__{idx}"
+            image = np.load(self.root_dir + "/cache/" + file_name + "__image.npy")
+            label = np.load(self.root_dir + "/cache/" + file_name + "__label.npy")
 
         else:
-            self.root_dir = root_dir + "/MedicalSegmentationDecathlon/Task05_Prostate"
+            image_path, label_path = self.id_to_path_dict[idx]
+            image = self.load_image(image_path)
+            label = self.load_label(label_path)
 
-            self.train_imgs_dir = self.root_dir + "/imagesTr"
-            self.train_labels_dir = self.root_dir + "/labelsTr"
-            self.test_imgs_dir = self.root_dir + "/imagesTs"
+            # print(f"after loading | image shape: {image.shape}, label shape: {label.shape}")
 
+            # float type
+            image = image.astype(float)
+            label = label.astype(float)
 
-            self.curr_imgs_dir = self.train_imgs_dir
+            # all images are 3D, but some are 1xHxWxD, so we reshape them to 1xHxWxD
+            if len(image.shape) == 3:
+                image = np.expand_dims(image, axis=0)
+            if len(label.shape) == 3:
+                label = np.expand_dims(label, axis=0)
 
-            file_names = [f for f in os.listdir(self.curr_imgs_dir) if f.endswith(".nii")]
+            # print(f"after expand_dims | image shape: {image.shape}, label shape: {label.shape}")
 
-            test_files = random.sample(file_names, int(len(file_names) * 0.2))
-            train_files = [f for f in file_names if f not in test_files]
-            self.file_names = train_files if self.train else test_files
+            # TODO:change num of padding slices
+            # pad to minimum 16 slices
+            if image.shape[1] < 16:
+                image = np.pad(image, ((0, 0), (0, 16 - image.shape[1]), (0, 0), (0, 0)), 'constant',
+                               constant_values=(0))
+                label = np.pad(label, ((0, 0), (0, 16 - label.shape[1]), (0, 0), (0, 0)), 'constant',
+                               constant_values=(0))
+                # print(f"image shape: {image.shape}, label shape: {label.shape}")
 
-            self.idx_to_case_map = dict(enumerate(self.file_names))
+            # print(f"after padding | image shape: {image.shape}, label shape: {label.shape}")
 
-            self.processed_files = {
-            key: f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_{key}" for key in
-            self.idx_to_case_map
-        }
+            # normalize non-zero elements by their mean and std
+            non_zero_index = np.nonzero(image)
+            non_zero_values = image[non_zero_index]
+            mean = np.mean(non_zero_values)
+            std = np.std(non_zero_values)
+            image[non_zero_index] = (image[non_zero_index] - mean) / std
 
+            # print(f"after normalization | image shape: {image.shape}, label shape: {label.shape}")
 
-    def __getitem__(self, idx):
-        if os.path.exists(self.processed_files[idx] + '_image.npy'):
-            image, label = np.load(self.processed_files[idx] + '_image.npy'), \
-                           np.load(self.processed_files[idx] + '_label.npy')
-            image = (image - image.min()) / (image.max() - image.min())
-            return reshape_to_3d(image), reshape_to_3d(label)
+            # save to cache
+            file_name = f"{self.__class__.__name__}__{'train' if self.train else 'test'}__{idx}"
+            np.save(self.root_dir + "/cache/" + file_name + "__image.npy", image)
+            np.save(self.root_dir + "/cache/" + file_name + "__label.npy", label)
 
-        nii_file_name = self.idx_to_case_map[idx]
+            ## End of "Not Cached" ##
 
-        # read scan
-        orig_scans = nib.load(f"{self.curr_imgs_dir}/{nii_file_name}")
+        # TODO: crop 3 pathces from each image
+        # random crop image to pathces 160X160
+        x1, y1, z1 = random_crop(image, self.scan_size)
+        cx, cy, cz = self.scan_size
+        # print(f"image shape: {image.shape}, selected point: {(x1, y1, z1)}")
+        image = image[:, x1:(x1 + cx), y1:(y1 + cy), z1:(z1 + cz)]
+        label = label[:, x1:(x1 + cx), y1:(y1 + cy), z1:(z1 + cz)]
 
-        # TODO: What is the difference between 0 and 1 at the last index? For now we use 0
-        np_scans = orig_scans.get_fdata()[:, :, :, 0]
+        # print(f"after random_crop | image shape: {image.shape}, label shape: {label.shape}")
 
-        # swap axes to match the shape of other Datasets
-        np_scans = np.swapaxes(np_scans, 0, 2)
+        # transform
+        # if self.transform:
+        #     image = self.transform(image)
+        #     label = self.transform(label)
 
-        # normalize np_scans to be 0-255
-        np_scans = 255 * (np_scans - np_scans.min()) / (np_scans.max() - np_scans.min())
-
-        # read labels
-        orig_labels = nib.load(f"{self.curr_imgs_dir}/{nii_file_name}".replace("imagesTr", "labelsTr"))
-
-        np_labels = orig_labels.get_fdata()
-        np_labels = np.swapaxes(np_labels, 0, 2)
-
-        # rmove labels of 2
-        np_labels = np.where(np_labels == 2, 1, np_labels)
-        np_labels, idx = random_crop(np_labels, MRI_SCAN_SHAPE)
-
-        return random_crop(np_scans, MRI_SCAN_SHAPE, idx)[0], np_labels
+        return image, label
 
 
 class Promise12(BaseDataset):
-    """Promise12 Medical Dataset"""
 
-    def __init__(self, root_dir, train=True, transform=None, **kwargs):
-        """
-        Args:
-            root_dir (string): Directory with an inner dir named "Promise12".
-                |- root_dir
-                |  |- Promise12
-                |  |  |- Test
-                |  |  |- Train
-            train (bool): Whether to take the training dataset or the test dataset
-            transform (callable, optional): Optional transform to be applied on a sample.
-        """
-        # check if processed files exist
-        self.train = train
-        self.transform = transform
-        if os.path.exists(
-                f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_0_image.npy"):
-            processed_files_list = glob.glob(
-                f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_*_image.npy")
-            self.processed_files = {key: f[:-10] for key, f in enumerate(processed_files_list)}
+    def load_image(self, path):
+        return sitk.GetArrayFromImage(sitk.ReadImage(path))
 
-        else:
-            self.root_dir = root_dir + "/Promise12"
-            self.train_dir = self.root_dir + "/Train"
-            self.test_dir = self.root_dir + "/Test"
+    def get_id_to_path_dict(self, root_dir):
+        root_dir += '/Promise12'
+        id_to_partition = {}
+        for i in [1, 2, 3]:
+            files_dict = {f[4:6]: i for f in os.listdir(f'{root_dir}/TrainingData_Part{i}/') if
+                          f.endswith('.mhd') and 'segmentation' not in f}
+            id_to_partition.update(files_dict)
 
-            self.train = train
-            self.transform = transform
+        id_to_case_dict = {k: f'{root_dir}/TrainingData_Part{id_to_partition[k]}/Case{k}' for k in
+                           id_to_partition.keys()}
+        return {idx: (f'{id_to_case_dict[k]}.mhd', f'{id_to_case_dict[k]}_segmentation.mhd') for idx, k in
+                enumerate(id_to_case_dict.keys())}
 
-            self.curr_dir = self.train_dir
 
-            file_names = os.listdir(self.curr_dir)
-            nums_in_filenames = sorted(list(set([''.join(filter(lambda i: i.isdigit(), s)) for s in file_names])))
+class PROSTATEx(BaseDataset):
 
-            test_files = random.sample(nums_in_filenames, int(len(nums_in_filenames) * 0.2))
-            train_files = [f for f in nums_in_filenames if f not in test_files]
-            self.nums_in_filenames = train_files if self.train else test_files
+    def load_image(self, path):
+        slices = [pydicom.dcmread(s) for s in sorted(glob.glob(path + '/*.dcm'))]
+        return np.stack([s.pixel_array for s in slices])
 
-            self.idx_to_case_map = dict(enumerate(self.nums_in_filenames))
+    def load_label(self, path):
+        label = self.load_image(path)
+        slices_num = label.shape[1] // 4
+        new_label = np.zeros((label.shape[0], slices_num, label.shape[2], label.shape[3]))
+        for i in range(4):
+            new_label += label[0, (slices_num * i):(slices_num * (i + 1)), :, :]
+        return new_label
 
-            self.processed_files = {
-                key: f"{root_dir}/processed/{self.__class__.__name__}_{'train' if self.train else 'test'}_{key}" for key in
-                self.idx_to_case_map
-            }
+    def get_id_to_path_dict(self, root_dir):
+        root_dir += '/PROSTATEx'
+        samples_metadata = pd.read_csv(f'{root_dir}/Samples/metadata.csv').set_index('Subject ID')
+        labels_metadata = pd.read_csv(f'{root_dir}/Labels/metadata.csv').set_index('Subject ID')
+        id_to_path_dict = {
+            idx: (f"{root_dir}/Samples/" + samples_metadata.loc[s]['File Location'][2:],
+                  f"{root_dir}/Labels/" + labels_metadata.loc[s]['File Location'][2:]) for idx, s in
+            enumerate(samples_metadata.index)
+        }
+        return id_to_path_dict
 
-    def __getitem__(self, idx):
-        if os.path.exists(self.processed_files[idx] + '_image.npy'):
-            image, label = np.load(self.processed_files[idx] + '_image.npy'), \
-                           np.load(self.processed_files[idx] + '_label.npy')
-            image = (image - image.min()) / (image.max() - image.min())
-            return reshape_to_3d(image), reshape_to_3d(label)
 
-        case_idx = self.idx_to_case_map[idx]
+class NciIsbi2013(BaseDataset):
+    def load_image(self, path):
+        slices = [pydicom.dcmread(s) for s in sorted(glob.glob(path + '/*.dcm'))]
+        return np.stack([s.pixel_array for s in slices])
 
-        if not os.path.exists(f"{self.curr_dir}/Case{case_idx}.mhd"):
-            raise Exception(f"Case {case_idx} not in {'Train' if self.train else 'Test'} directory")
+    def load_label(self, path):
+        # nrrd returns a tuple of (data, header)
+        label = nrrd.read(path)[0]
+        label = np.where(label == 2, 1, label)
+        return np.swapaxes(label, 0, 2)
 
-        scans = sitk.GetArrayFromImage(sitk.ReadImage(f"{self.curr_dir}/Case{case_idx}.mhd", sitk.sitkFloat32))
+    def get_id_to_path_dict(self, root_dir):
+        root_dir += '/NCI-ISBI-2013'
+        image_metadata = pd.read_csv(
+            f'{root_dir}/ISBI-Prostate-Challenge-Training/metadata.csv').set_index('Subject ID')
+        idx_to_subject_id = {idx: s for idx, s in enumerate(
+            sorted(image_metadata.index.values))}
+        id_to_path_dict = {
+            idx: (
+                f'{root_dir}/ISBI-Prostate-Challenge-Training/' +
+                image_metadata.loc[idx_to_subject_id[idx],
+                                   'File Location'][2:],
+                f'{root_dir}/Labels/Training/{idx_to_subject_id[idx]}.nrrd'
+            ) for idx in idx_to_subject_id.keys()
+        }
+        return id_to_path_dict
 
-        # normalize np_scans to be 0-255
-        # scans = 255 * (scans - scans.min()) / (scans.max() - scans.min())
 
-        label_segmentations = sitk.GetArrayFromImage(
-            sitk.ReadImage(f"{self.curr_dir}/Case{case_idx}_segmentation.mhd",
-                           sitk.sitkFloat32))
-        label_segmentations, idx = random_crop(label_segmentations, MRI_SCAN_SHAPE)
+class MedicalSegmentationDecathlon(BaseDataset):
+    def load_image(self, path):
+        nii_img = nib.load(path)
+        nii_data = nii_img.get_fdata()[:, :, :, 0]
+        return np.swapaxes(nii_data, 0, 2)
 
-        return random_crop(scans, MRI_SCAN_SHAPE, idx)[0], label_segmentations
+    def load_label(self, path):
+        nii_img = nib.load(path)
+        nii_data = nii_img.get_fdata()
+        nii_data = np.where(nii_data == 2, 1, nii_data)
+        return np.swapaxes(nii_data, 0, 2)
+
+    def get_id_to_path_dict(self, root_dir):
+        root_dir += '/MedicalSegmentationDecathlon/Task05_Prostate/'
+        with open(f'{root_dir}dataset.json') as f:
+            data = json.load(f)
+        id_to_path_dict = {id: (root_dir + v['image'][2:-3], root_dir + v['label'][2:-3])
+                           for id, v in enumerate(data['training'])}
+
+        return id_to_path_dict
 
 
 def test_plot_dataset(data_obj):
