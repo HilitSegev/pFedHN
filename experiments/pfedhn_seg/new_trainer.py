@@ -1,32 +1,69 @@
 # imports and constants
+import argparse
+
 print("imports and constants")
-import numpy as np
 import random
-import torch
+
+import numpy as np
 import torch.utils.data
+import wandb
 from monai.data import DataLoader
 from monai.inferers import SlidingWindowInferer
 from monai.metrics import DiceMetric
 from monai.transforms import EnsureType, Activations, AsDiscrete, Compose
 
-import wandb
 from custom_losses import *
 from experiments.pfedhn_seg import monai_datasets
-from experiments.pfedhn_seg.models import CNNTarget
+from experiments.pfedhn_seg.models import CNNTarget, CNNHyper
 
 print("imports and constants done")
 
+# ==================== CONFIG ====================
+parser = argparse.ArgumentParser(
+    description="Federated Hypernetwork with Lookahead experiment"
+)
+
+#############################
+#       Dataset Args        #
+#############################
+
+parser.add_argument("--data-path", type=str, default="/dsi/shared/hilita/ProstateSegmentation/",
+                    help="dir path for MNIST dataset")
+
+##################################
+#       Optimization args        #
+##################################
+parser.add_argument("--num-steps", type=int, default=5000)
+parser.add_argument("--inner-steps", type=int, default=5, help="number of inner steps")
+
+################################
+#       Model Prop args        #
+################################
+parser.add_argument("--inner-lr", type=float, default=5e-3, help="learning rate for inner optimizer")
+parser.add_argument("--lr", type=float, default=1e-2, help="learning rate")
+parser.add_argument("--dropout-p", type=float, default=0.5, help="p for dropout layers")
+
+#############################
+#       General args        #
+#############################
+parser.add_argument("--gpu", type=int, default=0, help="gpu device ID")
+parser.add_argument("--use-hn", type=int, default=0, help="use HyperNetwork or not")
+
+args = parser.parse_args()
+assert args.gpu <= torch.cuda.device_count(), f"--gpu flag should be in range [0,{torch.cuda.device_count() - 1}]"
+
 config = {
-    'num_steps': 35000,
-    'inner_steps': 25,
+    'num_steps': args.num_steps,
+    'inner_steps': args.inner_steps,
     'batch_size': 6,
-    'data_path': '/dsi/shared/hilita/ProstateSegmentation/',
-    'dropout_p': 0.5,
+    'data_path': args.data_path,
+    'dropout_p': args.dropout_p,
     'embed_dim': -1,
     'hyper_hidden_dim': 100,
     'hyper_n_hidden': 20,
-    'device': 'cuda:7',
-
+    'device': f'cuda:{args.gpu}' if torch.cuda.is_available() else 'cpu',
+    'lr': args.lr,
+    'use_hn': args.use_hn,
 }
 
 
@@ -35,7 +72,7 @@ def eval_model(model, dataloader):
     # define metrics
     criteria = DiceBCELoss(dice_weight=1, bce_weight=1)
     inferer = SlidingWindowInferer(roi_size=(160, 160, 32),
-                                   sw_batch_size=4,
+                                   sw_batch_size=1,
                                    overlap=0.25,
                                    device=config['device'],
                                    sw_device=config['device'],
@@ -76,13 +113,21 @@ define models
 # UNet
 target_net = CNNTarget(in_channels=1,
                        out_channels=1,
-                       features=[16, 32, 64, 128],
+                       features=[16, 32, 64],
                        dropout_p=config['dropout_p'])
 
-# # HyperNet
-# hnet = CNNHyper(config['embed_dim'], 1, hidden_dim=config['hyper_hidden_dim'], n_hidden=config['hyper_n_hidden'])
+# HyperNet
+last_conv_block = ['final_conv.weight', 'final_conv.bias']
+hnet = CNNHyper(n_nodes=4,
+                embedding_dim=config['embed_dim'],
+                model=target_net,
+                out_layers=last_conv_block,
+                in_channels=1,
+                hidden_dim=config['hyper_hidden_dim'],
+                n_hidden=config['hyper_n_hidden'])
 
 target_net.to(config['device'])
+hnet.to(config['device'])
 
 # wandb login
 wandb.login()
@@ -106,7 +151,9 @@ with wandb.init(project='pFedHN-MedicalSegmentation-Unet',
         test_loaders[node_id] = DataLoader(datasets[2], batch_size=1, shuffle=False)
 
     # optimizers
-    optimizer = torch.optim.Adam(target_net.parameters(), lr=1e-2, weight_decay=1e-5)
+    optimizer = torch.optim.Adam(target_net.parameters(),
+                                 lr=config['lr'],
+                                 weight_decay=1e-5)
 
     # criteria
     criteria = DiceBCELoss(dice_weight=0, bce_weight=1)
@@ -159,9 +206,9 @@ with wandb.init(project='pFedHN-MedicalSegmentation-Unet',
             metric, loss = eval_model(target_net, val_loaders[node_id])
 
             # change loss to support DiceLoss
-            if loss < 0.2 and step % 100 == 0:
-                dice_weight = criteria.dice_weight
-                criteria = DiceBCELoss(dice_weight=dice_weight + 1, bce_weight=1)
+            # if loss < 0.2 and step % 100 == 0:
+            #     dice_weight = criteria.dice_weight
+            #     criteria = DiceBCELoss(dice_weight=dice_weight + 1, bce_weight=1)
 
             print(f"Step {step}: Validation Metric: {metric} Validation Loss: {loss}")
             wandb.log(
