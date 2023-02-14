@@ -34,6 +34,30 @@ def random_crop(image, size):
     return x1, y1, z1
 
 
+def cover_image(full_image, patch_size):
+    """
+    input: (1, D, W, H)
+    output: (num_of_patches, scan_size[0],scan_size[1], scan_size[2])
+    """
+    image = full_image[0]
+    min_value = np.min(image)
+    padding_value = float(min_value * 1.01)
+    # calculate necessary padding
+    pad_sizes = [(patch_size[i] - image.shape[i] % patch_size[i]) % patch_size[i] for i in range(len(image.shape))]
+    # pad image
+    padded_image = np.pad(image, [(0, pad_sizes[0]), (0, pad_sizes[1]), (0, pad_sizes[2])], mode='constant',
+                          constant_values=padding_value)
+
+    # crop image into patches
+    patches = np.array([padded_image[i:i + patch_size[0], j:j + patch_size[1], k:k + patch_size[2]] for i in
+                        range(0, padded_image.shape[0], patch_size[0]) for j in
+                        range(0, padded_image.shape[1], patch_size[1]) for k in
+                        range(0, padded_image.shape[2], patch_size[2])])
+
+    # return patches
+    return patches
+
+
 class BaseDataset(Dataset):
     def is_valid(self, image_path, label_path):
         im = self.load_image(image_path)
@@ -65,7 +89,7 @@ class BaseDataset(Dataset):
         self.full_id_to_path_dict = {k: v for k, v in self.full_id_to_path_dict.items() if self.is_valid(v[0], v[1])}
         print(f"{self.__class__.__name__} \t {len(self.full_id_to_path_dict)}")
 
-        train_dict, test_dict = split_dict(self.full_id_to_path_dict, 0.8)
+        train_dict, test_dict = split_dict(self.full_id_to_path_dict, 0.7)
 
         if self.train:
             self.id_to_path_dict = {idx: v for idx, v in enumerate(train_dict.values())}
@@ -109,42 +133,54 @@ class BaseDataset(Dataset):
 
             # print(f"after expand_dims | image shape: {image.shape}, label shape: {label.shape}")
 
-            # TODO:change num of padding slices
-            # pad to minimum 16 slices
-            if image.shape[1] < 16:
-                image = np.pad(image, ((0, 0), (0, 16 - image.shape[1]), (0, 0), (0, 0)), 'constant',
-                               constant_values=(0))
-                label = np.pad(label, ((0, 0), (0, 16 - label.shape[1]), (0, 0), (0, 0)), 'constant',
-                               constant_values=(0))
-                # print(f"image shape: {image.shape}, label shape: {label.shape}")
-
-            # print(f"after padding | image shape: {image.shape}, label shape: {label.shape}")
-
             # normalize non-zero elements by their mean and std
             non_zero_index = np.nonzero(image)
             non_zero_values = image[non_zero_index]
             mean = np.mean(non_zero_values)
             std = np.std(non_zero_values)
-            image[non_zero_index] = (image[non_zero_index] - mean) / std
-
+            # TODO: Do we need to normalize only non-zero values?
+            image = (image - mean) / std
+            min_value = np.min(image)
+            padding_value = float(min_value * 1.01)
             # print(f"after normalization | image shape: {image.shape}, label shape: {label.shape}")
+
+            # TODO:change num of padding slices
+            # pad to minimum 16 slices
+            if image.shape[1] < 16:
+                image = np.pad(image, ((0, 0), (0, 16 - image.shape[1]), (0, 0), (0, 0)), 'constant',
+                               constant_values=padding_value)
+                label = np.pad(label, ((0, 0), (0, 16 - label.shape[1]), (0, 0), (0, 0)), 'constant',
+                               constant_values=0)
+                # print(f"image shape: {image.shape}, label shape: {label.shape}")
+
+            # print(f"after padding | image shape: {image.shape}, label shape: {label.shape}")
+
+            # save patches for validation and test sets
+            if not self.train:
+                # TODO: maybe majority voting?
+                # cover image and label with self.scan_size patches
+                image = cover_image(image, self.scan_size)
+                label = cover_image(label, self.scan_size)
 
             # save to cache
             file_name = f"{self.__class__.__name__}__{'train' if self.train else 'test'}__{idx}"
-            np.save(self.root_dir + "/cache/" + file_name + "__image.npy", image)
-            np.save(self.root_dir + "/cache/" + file_name + "__label.npy", label)
+            try:
+                np.save(self.root_dir + "/cache/" + file_name + "__image.npy", image)
+                np.save(self.root_dir + "/cache/" + file_name + "__label.npy", label)
+            except:
+                print(f"Error while saving {file_name} to cache")
 
             ## End of "Not Cached" ##
+        if self.train:
+            # TODO: crop 3 pathces from each image
+            # random crop image to pathces 160X160
+            x1, y1, z1 = random_crop(image, self.scan_size)
+            cx, cy, cz = self.scan_size
+            # print(f"image shape: {image.shape}, selected point: {(x1, y1, z1)}")
+            image = image[:, x1:(x1 + cx), y1:(y1 + cy), z1:(z1 + cz)]
+            label = label[:, x1:(x1 + cx), y1:(y1 + cy), z1:(z1 + cz)]
 
-        # TODO: crop 3 pathces from each image
-        # random crop image to pathces 160X160
-        x1, y1, z1 = random_crop(image, self.scan_size)
-        cx, cy, cz = self.scan_size
-        # print(f"image shape: {image.shape}, selected point: {(x1, y1, z1)}")
-        image = image[:, x1:(x1 + cx), y1:(y1 + cy), z1:(z1 + cz)]
-        label = label[:, x1:(x1 + cx), y1:(y1 + cy), z1:(z1 + cz)]
-
-        # print(f"after random_crop | image shape: {image.shape}, label shape: {label.shape}")
+            # print(f"after random_crop | image shape: {image.shape}, label shape: {label.shape}")
 
         # transform
         # if self.transform:
@@ -155,7 +191,6 @@ class BaseDataset(Dataset):
 
 
 class Promise12(BaseDataset):
-
     def load_image(self, path):
         return sitk.GetArrayFromImage(sitk.ReadImage(path))
 

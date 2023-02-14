@@ -11,88 +11,87 @@ import wandb
 import numpy as np
 import torch
 import torch.utils.data
+from monai.inferers import SlidingWindowInferer
+from monai.losses import DiceLoss
+from monai.metrics import DiceMetric
+from monai.transforms import EnsureType, Activations, AsDiscrete, Compose
+from torch.autograd import Variable
+from torch.nn import BCELoss
 from tqdm import trange
 
-from experiments.pfedhn_seg.custom_losses import DiceBCELoss
+from experiments.pfedhn_seg.custom_losses import DiceBCELoss, Dice
 from experiments.pfedhn_seg.models import CNNHyper, CNNTarget
 from experiments.pfedhn_seg.node import BaseNodes
 from experiments.utils import get_device, set_logger, set_seed, str2bool
 
-ALLOWED_DATASETS = ['promise12', 'medical_segmentation_decathlon', 'nci_isbi_2013', 'prostatex']
+ALLOWED_DATASETS = ['Promise12', 'MSD', 'NCI_ISBI', 'PROSTATEx']
 
-# logging.basicConfig(
-#     filename=f'run_{str(datetime.datetime.now()).replace(" ", "-").replace(":", "-").replace(".", "-")}.log',
-#     level=logging.INFO)
+class DiceCELoss(torch.nn.Module):
+    def __init__(self, sigmoid=True):
+        super().__init__()
+        self.dice_loss = DiceLoss(sigmoid=sigmoid)
+        self.ce_loss = BCELoss()
 
-logging.basicConfig(
-    # filename=f'run_{str(datetime.datetime.now()).replace(" ", "-").replace(":", "-").replace(".", "-")}.log',
-    level=logging.INFO)
+    def forward(self, pred, target):
+        return self.dice_loss(pred, target) + self.ce_loss(torch.sigmoid(pred), target)
 
-
-def dice_loss_3d(pred_3d, label_3d):
-    return 2 * (((pred_3d > 0.5) * (label_3d > 0.5)).sum().item() + 1) / (
-            (pred_3d > 0.5).sum().item() + (label_3d > 0.5).sum().item() + 1)
-
-
-def eval_model(nodes, hnet, net, criteria, device, split, use_hnet, batch_norm_layers_dict):
-    curr_results = evaluate(nodes, hnet, net, criteria, device, split=split, use_hnet=use_hnet,
-                            batch_norm_layers_dict=batch_norm_layers_dict)
-    avg_loss = (sum([node_res['total'] * node_res['loss'] for node_res in curr_results.values()]) / sum(
-        [node_res['total'] for node_res in curr_results.values()]))
-    avg_dice = (sum([node_res['total'] * node_res['mean_dice'] for node_res in curr_results.values()]) / sum(
-        [node_res['total'] for node_res in curr_results.values()]))
-
-    all_dice = [node_res['mean_dice'] for node_res in curr_results.values()]
-
-    return curr_results, avg_loss, avg_dice, all_dice
+# DEBUG Helpers
+DEBUG_MODE = True
 
 
-@torch.no_grad()
-def evaluate(nodes: BaseNodes, hnet, net, criteria, device, split='test', use_hnet=True, batch_norm_layers_dict=None):
-    hnet.eval()
-    results = defaultdict(lambda: defaultdict(list))
+logging.basicConfig(level=logging.INFO)
 
-    for node_id in range(len(nodes)):  # iterating over nodes
 
-        running_loss, running_dice, running_samples = 0., 0., 0.
-        if split == 'test':
-            curr_data = nodes.test_loaders[node_id]
-        elif split == 'val':
-            curr_data = nodes.val_loaders[node_id]
-        else:
-            curr_data = nodes.train_loaders[node_id]
+def init_local_net(net, hnet, node_id, use_hnet, device, batch_norm_layers_dict):
+    weights = hnet(torch.tensor([node_id], dtype=torch.long).to(device))
+    if use_hnet:
+        weights_with_batch_norm = {}
+        weights_with_batch_norm.update(weights)
 
-        for batch_count, batch in enumerate(curr_data):
-            img, label = tuple(t.to(device) for t in batch)
-            weights = hnet(torch.tensor([node_id], dtype=torch.long).to(device))
+        if node_id in batch_norm_layers_dict:
+            weights_with_batch_norm.update(batch_norm_layers_dict[node_id])
 
-            if use_hnet:
-                weights_with_batch_norm = {}
-                weights_with_batch_norm.update(weights)
+        logging.debug(f"weights are assigned!")
 
-                if node_id in batch_norm_layers_dict:
-                    weights_with_batch_norm.update(batch_norm_layers_dict[node_id])
+        # keep the BatchNorm params in the state_dict
+        model_dict = net.state_dict()
+        model_dict.update(weights_with_batch_norm)
+        net.load_state_dict(model_dict)
+    return net, weights
 
-                logging.debug(f"weights are assigned!")
 
-                model_dict = net.state_dict()
-                model_dict.update(weights_with_batch_norm)
-                net.load_state_dict(model_dict)
+def eval_net(net, dataloader_to_evaluate, device, inferer, criteria, eval_metric, transform_post):
+    torch.cuda.empty_cache()
+    with torch.no_grad():
+        net.eval()
+        cum_metric = 0
+        cum_loss = 0
+        for i, batch in enumerate(dataloader_to_evaluate):
+            # logging.info(f"Processing batch {i}/{len(dataloader_to_evaluate)}")
+            val_img, val_label = (
+                batch["image"].to(device),
+                batch["label"].to(device),
+            )
 
-            pred = net(img.float())
-            running_loss += criteria(pred, label).item()
-            # TODO: update to use dice loss (and update mean)
-            running_dice = (running_samples * running_dice + \
-                            len(label) * np.mean([dice_loss_3d(pred[i], label[i]) for i in range(pred.shape[0])])) \
-                           / (running_samples + len(label))
-            # running_correct += pred.argmax(1).eq(label).sum().item()
-            running_samples += len(label)
+            # Inference
+            val_outputs = inferer(val_img, net)
 
-        results[node_id]['loss'] = running_loss / (batch_count + 1)
-        results[node_id]['mean_dice'] = running_dice
-        results[node_id]['total'] = running_samples
+            # compute loss for validation set
+            loss_score = criteria(val_outputs, val_label)
+            cum_loss += loss_score.item()
 
-    return results
+            # Compute metric for 1 batch of validation set
+            val_outputs = transform_post(val_outputs)
+            metric_score = eval_metric(y_pred=val_outputs, y=val_label)
+
+            cum_metric += metric_score.item()
+
+        # compute mean dice over whole validation set
+        mean_metric = cum_metric / len(dataloader_to_evaluate)
+        mean_loss = cum_loss / len(dataloader_to_evaluate)
+        #TODO: why train???
+        net.train()
+        return mean_metric, mean_loss
 
 
 def train(data_names: List[str], data_path: str,
@@ -105,21 +104,15 @@ def train(data_names: List[str], data_path: str,
     ###############################
     nodes = BaseNodes(data_names, data_path, batch_size=bs)
 
-    embed_dim = embed_dim
-    if embed_dim == -1:
-        logging.info("auto embedding size")
-        embed_dim = int(1 + len(nodes) / 4)
-
     if all([d in ALLOWED_DATASETS for d in data_names]):
-        # hnet = CNNHyper(len(nodes), embed_dim, hidden_dim=hyper_hid,
-        #                 n_hidden=n_hidden, n_kernels=n_kernels, out_dim=100)
         net = CNNTarget(in_channels=1, out_channels=1, features=[16, 32, 64, 128], dropout_p=dropout_p)
 
-        last_conv_block = [
-            l for l in net.state_dict() if
-            f"ups.{max([int(k.split('.')[1]) for k in net.state_dict().keys() if 'ups' in k])}" in l
-        ]
+        # last_conv_block = [
+        #                       l for l in net.state_dict() if
+        #                       f"ups.{max([int(k.split('.')[1]) for k in net.state_dict().keys() if 'ups' in k])}" in l
+        #                   ] + ['final_conv.weight', 'final_conv.bias']
 
+        last_conv_block = ['final_conv.weight', 'final_conv.bias']
         hnet = CNNHyper(len(nodes), embed_dim, hidden_dim=hyper_hid, model=net, n_hidden=n_hidden,
                         out_layers=last_conv_block)
     else:
@@ -142,9 +135,22 @@ def train(data_names: List[str], data_path: str,
         'adam': torch.optim.Adam(params=hnet.parameters(), lr=lr)
     }
     optimizer = optimizers[optim]
-    # use mix of Dice and BCE loss
 
-    criteria = DiceBCELoss()
+    #########################
+    # init loss and inferer #
+    #########################
+    # use mix of Dice and BCE loss
+    # criteria = DiceBCELoss()  # Sigmoid and Threshold are included in DiceBCELoss
+    criteria = DiceCELoss(sigmoid=True)
+    inferer = SlidingWindowInferer(roi_size=(160, 160, 32),
+                                   sw_batch_size=4,
+                                   overlap=0.25,
+                                   device=device,
+                                   sw_device=device,
+                                   progress=False)
+    eval_metric = DiceMetric(include_background=False, reduction="mean", get_not_nans=False)
+    # Sigmoid and Threshold are **not** included in DiceMetric, so need to do the post_transfrom
+    transform_post = Compose([EnsureType(), Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
 
     ################
     # init metrics #
@@ -161,11 +167,10 @@ def train(data_names: List[str], data_path: str,
     logging.info(f"Starting training with {len(nodes)} nodes")
 
     batch_norm_layers_dict = {}
-
     use_hnet = False
     for step in step_iter:
         # check if we should use hnet
-        if step >= no_hn_steps:
+        if step == no_hn_steps:
             logging.info(f"using hnet from step {step}")
             use_hnet = True
 
@@ -175,20 +180,7 @@ def train(data_names: List[str], data_path: str,
         node_id = random.choice(range(len(nodes)))
 
         # produce & load local network weights
-        weights = hnet(torch.tensor([node_id], dtype=torch.long).to(device))
-        if use_hnet:
-            weights_with_batch_norm = {}
-            weights_with_batch_norm.update(weights)
-
-            if node_id in batch_norm_layers_dict:
-                weights_with_batch_norm.update(batch_norm_layers_dict[node_id])
-
-            logging.debug(f"weights are assigned!")
-
-            # keep the BatchNorm params in the state_dict
-            model_dict = net.state_dict()
-            model_dict.update(weights_with_batch_norm)
-            net.load_state_dict(model_dict)
+        net, weights = init_local_net(net, hnet, node_id, use_hnet, device, batch_norm_layers_dict)
 
         # init inner optimizer
         inner_optim = torch.optim.SGD(
@@ -199,37 +191,24 @@ def train(data_names: List[str], data_path: str,
         inner_state = OrderedDict({k: tensor.data for k, tensor in weights.items()})
 
         # NOTE: evaluation on sent model
-        with torch.no_grad():
-            net.eval()
-            # TODO: is this the way to handle StopIteration?
-            try:
-                batch = next(iter(nodes.val_loaders[node_id]))
-            except StopIteration:
-                print(f"Stop iteration for val in {node_id}")
-                continue
-            img, label = tuple(t.to(device) for t in batch)
-            pred = net(img.float())
-            prvs_loss = criteria(pred, label)
+        if step % 10 == 0:
+            with torch.no_grad():
+                dataloader_to_evaluate = nodes.val_loaders[node_id]
+                mean_dice, mean_loss = eval_net(net,
+                                                dataloader_to_evaluate,
+                                                device,
+                                                inferer,
+                                                criteria,
+                                                eval_metric,
+                                                transform_post)
 
-            if node_id not in losses_dict:
-                losses_dict[node_id] = []
-            losses_dict[node_id].append(prvs_loss.item())
-
-            # log loss to wandb
-            if (len(losses_dict[node_id]) + 1) % 5 == 0:
-                wandb.log(
-                    {f"target_val_loss_{node_id}": float(prvs_loss)},
-                    step=step
-                )
-
-            prvs_acc = np.mean([dice_loss_3d(pred[i], label[i]) for i in range(pred.shape[0])])
-            if (len(losses_dict[node_id]) + 1) % 5 == 0:
-                wandb.log(
-                    {f"target_val_avg_dice_{node_id}": float(prvs_acc)},
-                    step=step
-                )
-
-            net.train()
+                # log loss to wandb
+                if not DEBUG_MODE:
+                    wandb.log(
+                        {f"target_val_loss_{node_id}": float(mean_loss),
+                         f"target_val_avg_dice_{node_id}": float(mean_dice)},
+                        step=step
+                    )
 
         # inner updates -> obtaining theta_tilda
         logging.debug(f"starting with inner steps")
@@ -237,31 +216,38 @@ def train(data_names: List[str], data_path: str,
             net.train()
             inner_optim.zero_grad()
             optimizer.zero_grad()
+            torch.cuda.empty_cache()
 
             batch = next(iter(nodes.train_loaders[node_id]))
-            img, label = tuple(t.to(device) for t in batch)
+            img, label = (
+                batch["image"].to(device),
+                batch["label"].to(device),
+            )
 
-            pred = net(img.float())
+            pred = net(img)
+
+            # pred = transform_post(pred)
 
             loss = criteria(pred, label)
-            loss.backward()
+            loss = Variable(loss, requires_grad=True)
 
-            if i % 10 == 0:
-                wandb.log(
-                    {f"inner_step_train_loss_{node_id}": float(loss)},
-                    step=step
-                )
+            loss.backward()
 
             torch.nn.utils.clip_grad_norm_(net.parameters(), 50)
 
             inner_optim.step()
-        # log loss to wandb
-        if (len(losses_dict[node_id]) + 1) % 5 == 0:
-            wandb.log(
-                {f"target_train_loss_{node_id}": float(loss)},
-                step=step
-            )
 
+        # log loss to wandb
+        if step % 5 == 0:
+            if not DEBUG_MODE:
+                wandb.log(
+                    {f"target_train_loss_{node_id}": float(loss)},
+                    step=step
+                )
+
+        # ==================== #
+        #   update hyper net   #
+        # ==================== #
         optimizer.zero_grad()
 
         final_state = net.state_dict()
@@ -273,7 +259,7 @@ def train(data_names: List[str], data_path: str,
         logging.debug("done with inner steps")
 
         if use_hnet:
-            # calculating delta theta
+            # calculating delta theta - should it be inner-final? or vice versa?
             delta_theta = OrderedDict({k: inner_state[k] - final_state[k] for k in weights.keys()})
 
             # calculating phi gradient
@@ -290,86 +276,55 @@ def train(data_names: List[str], data_path: str,
             optimizer.step()
             logging.debug("done with hnet update")
         step_iter.set_description(
-            f"Step: {step + 1}, Node ID: {node_id}, Loss: {prvs_loss:.4f},  Acc: {prvs_acc:.4f}"
+            f"Step: {step + 1}, Node ID: {node_id}"  # , Loss: {mean_loss:.4f},  Dice: {mean_dice:.4f}"
         )
 
         # Eval using test set
+
         if step % eval_every == 0:
             last_eval = step
-            step_results, avg_loss, avg_dice, all_dice = eval_model(nodes, hnet, net, criteria, device,
-                                                                    split="test", use_hnet=use_hnet,
-                                                                    batch_norm_layers_dict=batch_norm_layers_dict)
-            logging.info(f"\nStep: {step + 1}, AVG Loss: {avg_loss:.4f},  AVG Dice: {avg_dice:.4f}")
-            wandb.log(
-                {f"AVG Dice": float(avg_dice)},
-                step=step
-            )
-            wandb.log(
-                {f"Dice - Node {node_id}": float(node_dice) for node_id, node_dice in enumerate(all_dice)},
-                step=step
-            )
-            results['test_avg_loss'].append(avg_loss)
-            results['test_avg_dice'].append(avg_dice)
+            all_dice, all_loss = 0, 0
+            for node_id in range(len(nodes)):
+                net, weights = init_local_net(net, hnet, node_id, use_hnet, device, batch_norm_layers_dict)
 
-            _, val_avg_loss, val_avg_dice, _ = eval_model(nodes, hnet, net, criteria, device, split="val",
-                                                          use_hnet=use_hnet,
-                                                          batch_norm_layers_dict=batch_norm_layers_dict)
-            if best_dice < val_avg_dice:
-                best_dice = val_avg_dice
-                best_step = step
-                test_best_based_on_step = val_avg_dice
-                test_best_min_based_on_step = np.min(all_dice)
-                test_best_max_based_on_step = np.max(all_dice)
-                test_best_std_based_on_step = np.std(all_dice)
+                dataloader_to_evaluate = nodes.test_loaders[node_id]
+                mean_dice, mean_loss = eval_net(net,
+                                                dataloader_to_evaluate,
+                                                device,
+                                                inferer,
+                                                criteria,
+                                                eval_metric,
+                                                transform_post)
 
-            results['val_avg_loss'].append(val_avg_loss)
-            results['val_avg_acc'].append(val_avg_dice)
-            results['best_step'].append(best_step)
-            results['best_val_acc'].append(best_dice)
-            results['best_test_acc_based_on_val_beststep'].append(test_best_based_on_step)
-            results['test_best_min_based_on_step'].append(test_best_min_based_on_step)
-            results['test_best_max_based_on_step'].append(test_best_max_based_on_step)
-            results['test_best_std_based_on_step'].append(test_best_std_based_on_step)
+                all_dice += mean_dice
+                all_loss += mean_loss
 
-    if step != last_eval:
-        _, val_avg_loss, val_avg_dice, _ = eval_model(nodes, hnet, net, criteria, device, split="val",
-                                                      use_hnet=use_hnet, batch_norm_layers_dict=batch_norm_layers_dict)
-        step_results, avg_loss, avg_dice, all_dice = eval_model(nodes, hnet, net, criteria, device,
-                                                                split="test", use_hnet=use_hnet,
-                                                                batch_norm_layers_dict=batch_norm_layers_dict)
-        logging.info(f"\nStep: {step + 1}, AVG Loss: {avg_loss:.4f},  AVG Dice: {avg_dice:.4f}")
+                # log loss to wandb
+                if not DEBUG_MODE:
+                    wandb.log(
+                        {f"test_loss_{node_id}": float(mean_loss),
+                         f"test_avg_dice_{node_id}": float(mean_dice)},
+                        step=step
+                    )
 
-        results['test_avg_loss'].append(avg_loss)
-        results['test_avg_acc'].append(avg_dice)
-
-        if best_dice < val_avg_dice:
-            best_dice = val_avg_dice
-            best_step = step
-            test_best_based_on_step = avg_dice
-            test_best_min_based_on_step = np.min(all_dice)
-            test_best_max_based_on_step = np.max(all_dice)
-            test_best_std_based_on_step = np.std(all_dice)
-
-        results['val_avg_loss'].append(val_avg_loss)
-        results['val_avg_acc'].append(val_avg_dice)
-        results['best_step'].append(best_step)
-        results['best_val_acc'].append(best_dice)
-        results['best_test_acc_based_on_val_beststep'].append(test_best_based_on_step)
-        results['test_best_min_based_on_step'].append(test_best_min_based_on_step)
-        results['test_best_max_based_on_step'].append(test_best_max_based_on_step)
-        results['test_best_std_based_on_step'].append(test_best_std_based_on_step)
+                logging.info(
+                    f"Step: {step + 1}, Node ID: {node_id}, Test Loss: {mean_loss:.4f}, Test Dice: {mean_dice:.4f}"
+                )
+            if not DEBUG_MODE:
+                wandb.log(
+                    {f"test_loss_all": float(all_loss / len(nodes)),
+                     f"test_avg_dice_all": float(all_dice / len(nodes))},
+                    step=step
+                )
 
     # save models to wandb
     torch.onnx.export(hnet, torch.tensor([node_id], dtype=torch.long).to(device), "hyper_net.onnx")
-    wandb.save("hyper_net.onnx")
+    if not DEBUG_MODE:
+        wandb.save("hyper_net.onnx")
 
     torch.onnx.export(net, img.float(), "target_net.onnx")
-    wandb.save("target_net.onnx")
-
-    save_path = Path(save_path)
-    save_path.mkdir(parents=True, exist_ok=True)
-    with open(str(save_path / f"results_{inner_steps}_inner_steps_seed_{seed}.json"), "w") as file:
-        json.dump(results, file, indent=4)
+    if not DEBUG_MODE:
+        wandb.save("target_net.onnx")
 
 
 if __name__ == '__main__':
@@ -383,7 +338,7 @@ if __name__ == '__main__':
 
     parser.add_argument(
         "--data-names", type=List[str],
-        default=['promise12', 'medical_segmentation_decathlon', 'nci_isbi_2013', 'prostatex'],
+        default=['Promise12', 'MSD', 'NCI_ISBI', 'PROSTATEx'],
         help="list of datasets to use for different clients"
     )
     parser.add_argument("--data-path", type=str, default="data", help="dir path for MNIST dataset")
@@ -394,7 +349,7 @@ if __name__ == '__main__':
 
     parser.add_argument("--num-steps", type=int, default=5000)
     parser.add_argument("--optim", type=str, default='sgd', choices=['adam', 'sgd'], help="learning rate")
-    parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--batch-size", type=int, default=6)
     parser.add_argument("--inner-steps", type=int, default=50, help="number of inner steps")
     parser.add_argument("--no-hn-steps", type=int, default=0,
                         help="number of steps without HN (only federated learning)")
@@ -418,7 +373,7 @@ if __name__ == '__main__':
     #       General args        #
     #############################
     parser.add_argument("--gpu", type=int, default=0, help="gpu device ID")
-    parser.add_argument("--eval-every", type=int, default=50, help="eval every X selected epochs")
+    parser.add_argument("--eval-every", type=int, default=250, help="eval every X selected epochs")
     parser.add_argument("--save-path", type=str, default="pfedhn_hetro_res", help="dir path for output file")
     parser.add_argument("--seed", type=int, default=42, help="seed value")
 
@@ -430,12 +385,37 @@ if __name__ == '__main__':
 
     device = get_device(gpus=args.gpu)
 
-    wandb.login()
-    with wandb.init(project='pFedHN-MedicalSegmentation',
-                    entity='pfedhnmed',
-                    name='UNET-3D-FULL-16-32-64-128-Dropout-HNforLastConv',
-                    config=args):
-        config = wandb.config
+    if not DEBUG_MODE:
+        wandb.login()
+        with wandb.init(project='pFedHN-MedicalSegmentation',
+                        entity='pfedhnmed',
+                        name='UNET-3D-FULL-16-32-64-128-Dropout-HNforLastConv',
+                        config=args):
+            config = wandb.config
+            train(
+                data_names=args.data_names,
+                data_path=args.data_path,
+                steps=args.num_steps,
+                inner_steps=args.inner_steps,
+                optim=args.optim,
+                lr=args.lr,
+                inner_lr=args.inner_lr,
+                embed_lr=args.embed_lr,
+                wd=args.wd,
+                inner_wd=args.inner_wd,
+                embed_dim=args.embed_dim,
+                hyper_hid=args.hyper_hid,
+                n_hidden=args.n_hidden,
+                n_kernels=args.nkernels,
+                bs=args.batch_size,
+                device=device,
+                eval_every=args.eval_every,
+                save_path=args.save_path,
+                seed=args.seed,
+                no_hn_steps=args.no_hn_steps,
+                dropout_p=args.dropout_p
+            )
+    else:
         train(
             data_names=args.data_names,
             data_path=args.data_path,
