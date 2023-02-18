@@ -1,5 +1,6 @@
 # imports and constants
 import argparse
+from collections import OrderedDict
 
 print("imports and constants")
 import random
@@ -33,14 +34,14 @@ parser.add_argument("--data-path", type=str, default="/dsi/shared/hilita/Prostat
 ##################################
 #       Optimization args        #
 ##################################
-parser.add_argument("--num-steps", type=int, default=5000)
-parser.add_argument("--inner-steps", type=int, default=5, help="number of inner steps")
+parser.add_argument("--num-steps", type=int, default=15000)
+parser.add_argument("--inner-steps", type=int, default=10, help="number of inner steps")
 
 ################################
 #       Model Prop args        #
 ################################
 parser.add_argument("--inner-lr", type=float, default=5e-3, help="learning rate for inner optimizer")
-parser.add_argument("--lr", type=float, default=1e-2, help="learning rate")
+parser.add_argument("--hn-lr", type=float, default=3e-2, help="learning rate")
 parser.add_argument("--dropout-p", type=float, default=0.5, help="p for dropout layers")
 
 #############################
@@ -55,16 +56,19 @@ assert args.gpu <= torch.cuda.device_count(), f"--gpu flag should be in range [0
 config = {
     'num_steps': args.num_steps,
     'inner_steps': args.inner_steps,
-    'batch_size': 6,
+    'batch_size': 4,
     'data_path': args.data_path,
     'dropout_p': args.dropout_p,
-    'embed_dim': -1,
+    'embed_dim': 100,  # -1,
     'hyper_hidden_dim': 100,
     'hyper_n_hidden': 20,
     'device': f'cuda:{args.gpu}' if torch.cuda.is_available() else 'cpu',
-    'lr': args.lr,
+    'hn_lr': args.hn_lr,
+    'inner_lr': args.inner_lr,
     'use_hn': args.use_hn,
 }
+
+print(config)
 
 
 # evaluation
@@ -107,17 +111,26 @@ def eval_model(model, dataloader):
     return mean_metric, mean_loss
 
 
+def init_local_net(net, hnet, node_id, use_hnet, device):
+    weights = hnet(torch.tensor([node_id], dtype=torch.long).to(device))
+    if use_hnet:
+        model_dict = net.state_dict()
+        model_dict.update(weights)
+        net.load_state_dict(model_dict)
+    return net, weights
+
+
 """
 define models
 """
 # UNet
 target_net = CNNTarget(in_channels=1,
                        out_channels=1,
-                       features=[16, 32, 64],
+                       features=[32, 64, 128],
                        dropout_p=config['dropout_p'])
 
 # HyperNet
-last_conv_block = ['final_conv.weight', 'final_conv.bias']
+last_conv_block = ['final_conv.weight', 'final_conv.bias'] + [k for k in target_net.state_dict() if 'running_' in k]
 hnet = CNNHyper(n_nodes=4,
                 embedding_dim=config['embed_dim'],
                 model=target_net,
@@ -133,7 +146,7 @@ hnet.to(config['device'])
 wandb.login()
 with wandb.init(project='pFedHN-MedicalSegmentation-Unet',
                 entity='pfedhnmed',
-                name='UNET-Baseline',
+                name=f'pFedHN-MedicalSegmentation-Unet' + f'_{"hn" if config["use_hn"] else "nohn"}',
                 config=config):
     print("wandb init")
 
@@ -152,8 +165,12 @@ with wandb.init(project='pFedHN-MedicalSegmentation-Unet',
 
     # optimizers
     optimizer = torch.optim.Adam(target_net.parameters(),
-                                 lr=config['lr'],
+                                 lr=config['inner_lr'],
                                  weight_decay=1e-5)
+
+    hn_optimizer = torch.optim.Adam(hnet.parameters(),
+                                    lr=config['hn_lr'],
+                                    weight_decay=1e-5)
 
     # criteria
     criteria = DiceBCELoss(dice_weight=0, bce_weight=1)
@@ -164,9 +181,15 @@ with wandb.init(project='pFedHN-MedicalSegmentation-Unet',
         node_id = random.choice(range(len(train_loaders)))
         train_loader = train_loaders[node_id]
 
-        # TODO: predict using HyperNet
+        # predict using HyperNet
+        target_net, predicted_weights = init_local_net(net=target_net,
+                                                       hnet=hnet,
+                                                       node_id=node_id,
+                                                       use_hnet=config['use_hn'],
+                                                       device=config['device'])
 
-        # TODO: load parameters to target_net
+        # get initial state for later calculation
+        inner_state = OrderedDict({k: tensor.data for k, tensor in predicted_weights.items()})
 
         # train target_net
         target_net.train()
@@ -192,7 +215,28 @@ with wandb.init(project='pFedHN-MedicalSegmentation-Unet',
             # update weights
             optimizer.step()
 
-        # TODO: train HyperNet
+        # train HyperNet
+        hn_optimizer.zero_grad()
+
+        final_state = target_net.state_dict()
+
+        if config['use_hn']:
+            # calculating delta theta - should it be inner-final? or vice versa?
+            delta_theta = OrderedDict({k: inner_state[k] - final_state[k] for k in predicted_weights.keys()})
+
+            # calculating phi gradient
+            hnet_grads = torch.autograd.grad(
+                list(predicted_weights.values()), hnet.parameters(), grad_outputs=list(delta_theta.values()),
+                allow_unused=True
+            )
+
+            # update hnet weights
+            for p, g in zip(hnet.parameters(), hnet_grads):
+                p.grad = g
+
+            torch.nn.utils.clip_grad_norm_(hnet.parameters(), 50)
+
+            hn_optimizer.step()
 
         # print loss on train set
         print(f"Step {step} Loss: {loss.item()}")
@@ -221,6 +265,13 @@ with wandb.init(project='pFedHN-MedicalSegmentation-Unet',
         if step % 50 == 0:
             test_evaluations = {}
             for node_id in test_loaders.keys():
+                # load target_net
+                target_net, _ = init_local_net(net=target_net,
+                                               hnet=hnet,
+                                               node_id=node_id,
+                                               use_hnet=config['use_hn'],
+                                               device=config['device'])
+
                 metric, loss = eval_model(target_net, test_loaders[node_id])
                 test_evaluations[node_id] = {'metric': float(metric),
                                              'loss': float(loss)}

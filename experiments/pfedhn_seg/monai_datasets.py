@@ -1,10 +1,10 @@
 # DEFAULTS
 import json
 
-from monai.data import Dataset, CacheDataset
+from monai.data import CacheDataset, Dataset
 from monai.transforms import Compose, LoadImaged, EnsureChannelFirstd, Orientationd, Spacingd, DivisiblePadd, \
     RandCropByPosNegLabeld, RandFlipd, NormalizeIntensityd, RandScaleIntensityd, RandShiftIntensityd, EnsureTyped, \
-    EnsureType, Activations, AsDiscrete, RandSpatialCropSamplesd
+    KSpaceSpikeNoised, GibbsNoised
 
 
 def get_datasets(data_name, root_dir):
@@ -15,6 +15,9 @@ def get_datasets(data_name, root_dir):
     :return:
     """
     assert root_dir.endswith("/"), "root_dir must end with '/'"
+
+    dataset_obj = Dataset
+
     # get data_lists for the client
     path_to_datalists = root_dir + 'datalist/'  # folder of json files
     if data_name != "NCI_ISBI":
@@ -55,10 +58,22 @@ def get_datasets(data_name, root_dir):
     # print("overfitting on a single image.")
     # print("========================================")
 
+    # add noise params
+    noise_params = {
+        "Promise12": GibbsNoised(keys=["image"], alpha=0.2),
+        "MSD": GibbsNoised(keys=["image"], alpha=0),
+        "NCI_ISBI": KSpaceSpikeNoised(keys=["image"],
+                                      loc=(10, 10, 10),
+                                      k_intensity=13),
+        "PROSTATEx": GibbsNoised(keys=["image"], alpha=0.5)
+    }
+    NoiseTransform = noise_params[data_name]
+
     # define transforms
     transform_train = Compose(
         [
             LoadImaged(keys=["image", "label"]),
+            NoiseTransform,
             EnsureChannelFirstd(keys=["image", "label"]),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(
@@ -79,7 +94,7 @@ def get_datasets(data_name, root_dir):
                 spatial_size=(160, 160, 32),
                 pos=1,
                 neg=1,
-                num_samples=3,
+                num_samples=4,
             ),
             RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
             RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=1),
@@ -107,16 +122,16 @@ def get_datasets(data_name, root_dir):
     )
     print("transforms defined")
     # create datasets
-    train_ds = CacheDataset(
+    train_ds = dataset_obj(
         data=train_list,
         transform=transform_train,
     )
-    valid_ds = CacheDataset(
+    valid_ds = dataset_obj(
         data=valid_list,
         transform=transform_valid_test,
     )
 
-    test_ds = CacheDataset(
+    test_ds = dataset_obj(
         data=test_list,
         transform=transform_valid_test,
     )

@@ -42,6 +42,7 @@ class CNNHyper(nn.Module):
             layers.append(
                 spectral_norm(nn.Linear(hidden_dim, hidden_dim)) if spec_norm else nn.Linear(hidden_dim, hidden_dim),
             )
+        layers.append(nn.ReLU(inplace=True))
 
         self.mlp = nn.Sequential(*layers)
 
