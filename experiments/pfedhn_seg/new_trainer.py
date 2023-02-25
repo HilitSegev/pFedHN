@@ -34,7 +34,7 @@ parser.add_argument("--data-path", type=str, default="/dsi/shared/hilita/Prostat
 ##################################
 #       Optimization args        #
 ##################################
-parser.add_argument("--num-steps", type=int, default=15000)
+parser.add_argument("--num-steps", type=int, default=10000)
 parser.add_argument("--inner-steps", type=int, default=10, help="number of inner steps")
 
 ################################
@@ -43,12 +43,17 @@ parser.add_argument("--inner-steps", type=int, default=10, help="number of inner
 parser.add_argument("--inner-lr", type=float, default=5e-3, help="learning rate for inner optimizer")
 parser.add_argument("--hn-lr", type=float, default=3e-2, help="learning rate")
 parser.add_argument("--dropout-p", type=float, default=0.5, help="p for dropout layers")
+parser.add_argument("--embed-dim", type=int, default=-1, help="embedding dimension")
+parser.add_argument("--unet-size", type=int, default=16, help="number of channels in the first conv layer")
 
 #############################
 #       General args        #
 #############################
 parser.add_argument("--gpu", type=int, default=0, help="gpu device ID")
 parser.add_argument("--use-hn", type=int, default=0, help="use HyperNetwork or not")
+parser.add_argument("--use-hn-for-final-conv", type=int, default=1,
+                    help="use HyperNetwork for the last convolution layer")
+parser.add_argument("--use-hn-for-batch-norm", type=int, default=1, help="use HyperNetwork for batch normalization")
 
 args = parser.parse_args()
 assert args.gpu <= torch.cuda.device_count(), f"--gpu flag should be in range [0,{torch.cuda.device_count() - 1}]"
@@ -59,13 +64,16 @@ config = {
     'batch_size': 4,
     'data_path': args.data_path,
     'dropout_p': args.dropout_p,
-    'embed_dim': 100,  # -1,
+    'embed_dim': args.embed_dim,  # -1,
     'hyper_hidden_dim': 100,
     'hyper_n_hidden': 20,
     'device': f'cuda:{args.gpu}' if torch.cuda.is_available() else 'cpu',
     'hn_lr': args.hn_lr,
     'inner_lr': args.inner_lr,
     'use_hn': args.use_hn,
+    'use_hn_for_final_conv': args.use_hn_for_final_conv,
+    'use_hn_for_batch_norm': args.use_hn_for_batch_norm,
+    'unet_size': args.unet_size
 }
 
 print(config)
@@ -126,11 +134,16 @@ define models
 # UNet
 target_net = CNNTarget(in_channels=1,
                        out_channels=1,
-                       features=[32, 64, 128],
+                       features=[config['unet_size'], 2 * config['unet_size'], 4 * config['unet_size']],
                        dropout_p=config['dropout_p'])
 
 # HyperNet
-last_conv_block = ['final_conv.weight', 'final_conv.bias'] + [k for k in target_net.state_dict() if 'running_' in k]
+last_conv_block = []
+if config['use_hn_for_final_conv']:
+    last_conv_block += ['final_conv.weight', 'final_conv.bias']
+if config['use_hn_for_batch_norm']:
+    last_conv_block += [k for k in target_net.state_dict() if 'running_' in k]
+
 hnet = CNNHyper(n_nodes=4,
                 embedding_dim=config['embed_dim'],
                 model=target_net,
@@ -291,3 +304,10 @@ with wandb.init(project='pFedHN-MedicalSegmentation-Unet',
                 },
                 step=step
             )
+
+    # save models to wandb
+    torch.onnx.export(hnet, torch.tensor([node_id], dtype=torch.long).to(config['device']), f"hyper_net_{step}.onnx")
+    wandb.save(f"hyper_net_{step}.onnx")
+
+    torch.onnx.export(target_net, img.float(), f"target_net.onnx")
+    wandb.save("target_net.onnx")

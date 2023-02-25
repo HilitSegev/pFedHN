@@ -16,31 +16,44 @@ def get_datasets(data_name, root_dir):
     """
     assert root_dir.endswith("/"), "root_dir must end with '/'"
 
-    dataset_obj = Dataset
+    dataset_obj = CacheDataset
 
     # get data_lists for the client
     path_to_datalists = root_dir + 'datalist/'  # folder of json files
-    if data_name != "NCI_ISBI":
-        datalist_json_path = path_to_datalists + 'client_' + data_name + ".json"
-        with open(datalist_json_path, "r") as f:
-            data_list = json.load(f)
-
-        train_list = data_list["training"]
-        valid_list = data_list["validation"]
-        test_list = data_list["testing"]
-    else:
-        # combine NCI_ISBI_Dx and NCI_ISBI_3T
+    if data_name == "all":
         train_list = []
         valid_list = []
         test_list = []
-        for dn in ["_Dx", "_3T"]:
-            datalist_json_path = path_to_datalists + 'client_NCI_ISBI' + dn + ".json"
+        for dn in ["Promise12", "MSD", "NCI_ISBI_Dx", "NCI_ISBI_3T", "PROSTATEx"]:
+            datalist_json_path = path_to_datalists + 'client_' + dn + ".json"
             with open(datalist_json_path, "r") as f:
                 data_list = json.load(f)
 
             train_list += data_list["training"]
             valid_list += data_list["validation"]
             test_list += data_list["testing"]
+    else:
+        if data_name != "NCI_ISBI":
+            datalist_json_path = path_to_datalists + 'client_' + data_name + ".json"
+            with open(datalist_json_path, "r") as f:
+                data_list = json.load(f)
+
+            train_list = data_list["training"]
+            valid_list = data_list["validation"]
+            test_list = data_list["testing"]
+        else:
+            # combine NCI_ISBI_Dx and NCI_ISBI_3T
+            train_list = []
+            valid_list = []
+            test_list = []
+            for dn in ["_Dx", "_3T"]:
+                datalist_json_path = path_to_datalists + 'client_NCI_ISBI' + dn + ".json"
+                with open(datalist_json_path, "r") as f:
+                    data_list = json.load(f)
+
+                train_list += data_list["training"]
+                valid_list += data_list["validation"]
+                test_list += data_list["testing"]
 
     # update data_lists to include full path
     for data_list in [train_list, valid_list, test_list]:
@@ -73,7 +86,7 @@ def get_datasets(data_name, root_dir):
     transform_train = Compose(
         [
             LoadImaged(keys=["image", "label"]),
-            NoiseTransform,
+            # NoiseTransform,
             EnsureChannelFirstd(keys=["image", "label"]),
             Orientationd(keys=["image", "label"], axcodes="RAS"),
             Spacingd(
@@ -82,12 +95,6 @@ def get_datasets(data_name, root_dir):
                 mode=("bilinear", "nearest"),
             ),
             DivisiblePadd(keys=["image", "label"], k=32),
-            # RandSpatialCropSamplesd(
-            #     keys=["image", "label"],
-            #     roi_size=[160,160,32],
-            #     random_size=False,
-            #     num_samples=3,
-            # ),
             RandCropByPosNegLabeld(
                 keys=["image", "label"],
                 label_key="label",
@@ -108,6 +115,7 @@ def get_datasets(data_name, root_dir):
     transform_valid_test = Compose(
         [
             LoadImaged(keys=["image", "label"]),
+            # NoiseTransform,
             EnsureChannelFirstd(keys=["image", "label"]),
             Spacingd(
                 keys=["image", "label"],
